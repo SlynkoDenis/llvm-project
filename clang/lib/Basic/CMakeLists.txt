@@ -94,6 +94,7 @@ add_clang_library(clangBasic
   Targets/WebAssembly.cpp
   Targets/X86.cpp
   Targets/XCore.cpp
+  Targets/Sim.cpp
   TokenKinds.cpp
   TypeTraits.cpp
   Version.cpp

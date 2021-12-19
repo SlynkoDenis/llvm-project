@@ -1201,6 +1201,8 @@ StringRef ELFObjectFile<ELFT>::getFileFormatName() const {
       return "elf32-sparc";
     case ELF::EM_AMDGPU:
       return "elf32-amdgpu";
+    case ELF::EM_SIM:
+      return "elf32-sim";
     default:
       return "elf32-unknown";
     }
@@ -1312,6 +1314,14 @@ template <class ELFT> Triple::ArchType ELFObjectFile<ELFT>::getArch() const {
     return Triple::ve;
   case ELF::EM_CSKY:
     return Triple::csky;
+  case ELF::EM_SIM: { // llvm-objdump -t -r
+    switch (EF.getHeader().e_ident[ELF::EI_CLASS]) {
+    case ELF::ELFCLASS32:
+      return Triple::sim;
+    default:
+      report_fatal_error("Invalid ELFCLASS!");
+    }
+  }
   default:
     return Triple::UnknownArch;
   }

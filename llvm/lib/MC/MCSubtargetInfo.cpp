@@ -20,6 +20,8 @@
 
 using namespace llvm;
 
+bool SimDisableUnreconginizedMessage = false;
+
 /// Find KV in array using binary search.
 template <typename T>
 static const T *Find(StringRef S, ArrayRef<T> A) {
@@ -60,6 +62,7 @@ static void ApplyFeatureFlag(FeatureBitset &Bits, StringRef Feature,
   assert(SubtargetFeatures::hasFlag(Feature) &&
          "Feature flags should start with '+' or '-'");
 
+  if (!SimDisableUnreconginizedMessage) {
   // Find feature in table.
   const SubtargetFeatureKV *FeatureEntry =
       Find(SubtargetFeatures::StripFlag(Feature), FeatureTable);
@@ -80,6 +83,7 @@ static void ApplyFeatureFlag(FeatureBitset &Bits, StringRef Feature,
   } else {
     errs() << "'" << Feature << "' is not a recognized feature for this target"
            << " (ignoring feature)\n";
+  }
   }
 }
 
@@ -207,6 +211,12 @@ static FeatureBitset getFeatures(StringRef CPU, StringRef TuneCPU, StringRef FS,
 
 void MCSubtargetInfo::InitMCProcessorInfo(StringRef CPU, StringRef TuneCPU,
                                           StringRef FS) {
+  #if 1 // Disable reconginized processor message for Sim
+  if (TargetTriple.getArch() == llvm::Triple::sim ||
+      TargetTriple.getArch() == llvm::Triple::sim) {
+    SimDisableUnreconginizedMessage = true;
+  }
+  #endif
   FeatureBits = getFeatures(CPU, TuneCPU, FS, ProcDesc, ProcFeatures);
   FeatureString = std::string(FS);
 
@@ -309,6 +319,13 @@ bool MCSubtargetInfo::checkFeatures(StringRef FS) const {
 const MCSchedModel &MCSubtargetInfo::getSchedModelForCPU(StringRef CPU) const {
   assert(llvm::is_sorted(ProcDesc) &&
          "Processor machine model table is not sorted");
+
+  #if 1 // Disable reconginized processor message for Sim
+  if (TargetTriple.getArch() != llvm::Triple::sim &&
+      TargetTriple.getArch() != llvm::Triple::sim) {
+    SimDisableUnreconginizedMessage = false;
+  }
+  #endif
 
   // Find entry
   const SubtargetSubTypeKV *CPUEntry = Find(CPU, ProcDesc);
