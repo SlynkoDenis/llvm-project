@@ -21,12 +21,12 @@
 //===----------------------------------------------------------------------===//
 
 // Generic Sim Format
-class SimInst<bits<8> op, dag outs, dag ins, string asmstr, list<dag> pattern>: Instruction
-{
+class SimInst<bits<8> op, dag outs, dag ins, string asmstr,
+              list<dag> pattern, InstrItinClass itin = NoItinerary> : Instruction {
   // Inst and Size: for tablegen(... -gen-emitter) and
   // tablegen(... -gen-disassembler) in CMakeLists.txt
-  let Namespace = "Sim";
-  let DecoderNamespace = "Sim";
+  let Namespace = "SIM";
+  let DecoderNamespace = "SIM";
   let Size = 4;
 
   field bits<32> Inst;
@@ -45,10 +45,15 @@ class SimInst<bits<8> op, dag outs, dag ins, string asmstr, list<dag> pattern>: 
   let InOperandList  = ins;
   let AsmString   = asmstr;
   let Pattern     = pattern;
+
+  let Itinerary = itin;
 }
 
+class ALU_ri<bits<8> opcode, string asmstr> : SimInst<opcode, (outs GPR:$r1), (ins GPR:$r2, GPR:$imm12),
+                                                      asmstr # "\t" # "$r1, $r2, $imm12", []>;
 
-class SimInstrRegister<bits<8> opcode, dag outs,
+
+class SimInstRegister<bits<8> opcode, dag outs,
                        dag ins, string asmstr> : SimInst<opcode, outs, ins, asmstr, []> {
   bits<4> r3;
 
@@ -56,10 +61,12 @@ class SimInstrRegister<bits<8> opcode, dag outs,
   let Inst{11-0}  = 0;
 }
 
+class ALU_rr<bits<8> opcode, string asmstr> : SimInstRegister<opcode, (outs GPR:$r1), (ins GPR:$r2, GPR:$r3),
+                                                              asmstr # "\t" # "$r1, $r2, $r3">;
 
-class ALU_rr<bits<8> opcode, string asmstr> : SimInst<opcode, (outs GPR:$rd), (ins GPR:$r1, GPR:$r2),
-                                                      asmstr # "\t" # "$rd, $r1, $r2", []>;
 
+class SimInstBranch<bits<8> opcode, dag outs,
+                     dag ins, string asmstr> : SimInst<opcode, outs, ins, asmstr, []>;
 
-class ALU_ri<bits<8> opcode, string asmstr> : SimInst<opcode, (outs GPR:$rd), (ins GPR:$r1, GPR:$imm12),
-                                                      asmstr # "\t" # "$rd, $r1, $imm12", []>;
+class BCOND<bits<8> opcode, string asmstr> : SimInstBranch<opcode, (outs), (ins GPR:$r1, GPR:$r2, GPR:$imm12),
+                                                           asmstr # "\t" # "$r1, $r2, $imm12">

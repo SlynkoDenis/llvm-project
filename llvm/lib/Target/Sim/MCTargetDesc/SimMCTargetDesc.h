@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_LIB_TARGET_Sim_MCTARGETDESC_SimMCTARGETDESC_H
-#define LLVM_LIB_TARGET_Sim_MCTARGETDESC_SimMCTARGETDESC_H
+#ifndef LLVM_LIB_TARGET_SIM_MCTARGETDESC_SIMMCTARGETDESC_H
+#define LLVM_LIB_TARGET_SIM_MCTARGETDESC_SIMMCTARGETDESC_H
 
 #include "llvm/Support/DataTypes.h"
 
@@ -20,7 +20,6 @@
 
 namespace llvm {
 class Target;
-class Triple;
 
 extern Target TheSimTarget;
 
@@ -35,4 +34,7 @@ extern Target TheSimTarget;
 #define GET_INSTRINFO_ENUM
 #include "SimGenInstrInfo.inc"
 
-#endif
+#define GET_SUBTARGETINFO_ENUM
+#include "SimGenSubtargetInfo.inc"
+
+#endif  // LLVM_LIB_TARGET_SIM_MCTARGETDESC_SIMMCTARGETDESC_H

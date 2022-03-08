@@ -18,6 +18,7 @@
 #include "llvm/MC/MCInstPrinter.h"
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCRegisterInfo.h"
+#include "llvm/MC/MCStreamer.h"
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/MC/MCSymbol.h"
 #include "llvm/Support/CommandLine.h"
@@ -33,6 +34,73 @@ using namespace llvm;
 #define GET_REGINFO_MC_DESC
 #include "SimGenRegisterInfo.inc"
 
-extern "C" void LLVMInitializeSimTargetMC() {
+#define GET_SUBTARGETINFO_MC_DESC
+#include "SimGenSubtargetInfo.inc"
 
+static MCAsmInfo *createSimMCAsmInfo(const MCRegisterInfo &MRI,
+    const Triple &T, const MCTargetOptions &Options) {
+    return new SimMCAsmInfo(T);
+}
+
+static MCInstPrinter *createSimMCInstrPrinter(const Triple &T, unsigned SyntaxVariant,
+    const MCAsmInfo *MAI, const MCInstrInfo &MII, const MCRegisterInfo &MRI) {
+    return new SimMCInstrPrinter(MAI, MII, MRI);
+}
+
+static MCRegisterInfo *createSimMCRegisterInfo(const Triple &TT) {
+  MCRegisterInfo *X = new MCRegisterInfo();
+  // TODO: choose register
+  InitSimMCRegisterInfo(X, SIM::R0);
+  return X;
+}
+
+static MCSubtargetInfo *createSimMCSubtargetInfo(const Triple &T, StringRef CPU, StringRef FS) {
+  return createSimMCSubtargetInfoImpl(T, CPU, /*TuneCPU*/ CPU, FS);
+}
+
+static MCTargetStreamer *createObjectTargetStreamer(MCStreamer &S, const MCSubtargetInfo &STI) {
+  return new SimTargetELFStreamer(S);
+}
+
+static MCTargetStreamer *createTargetAsmStreamer(MCStreamer &S,
+                                                 formatted_raw_ostream &OS,
+                                                 MCInstPrinter *InstPrint,
+                                                 bool isVerboseAsm) {
+  return new SimTargetAsmStreamer(S, OS);
+}
+
+static MCInstPrinter *createSimMCInstPrinter(const Triple &T,
+                                               unsigned SyntaxVariant,
+                                               const MCAsmInfo &MAI,
+                                               const MCInstrInfo &MII,
+                                               const MCRegisterInfo &MRI) {
+  return new SimInstPrinter(MAI, MII, MRI);
+}
+
+extern "C" void LLVMInitializeSimTargetMC() {
+    auto *T = getTheSimTarget();
+
+    TargetRegistry::RegisterMCAsmInfo(*T, createSimMCInstrPrinter);
+
+    // Register the MC register info.
+    TargetRegistry::RegisterMCRegInfo(*T, createSimMCRegisterInfo);
+
+    // Register the MC subtarget info.
+    TargetRegistry::RegisterMCSubtargetInfo(*T, createSimMCSubtargetInfo);
+
+    // // Register the MC Code Emitter.
+    // TargetRegistry::RegisterMCCodeEmitter(*T, createSimMCCodeEmitter);
+
+    // // Register the asm backend.
+    // TargetRegistry::RegisterMCAsmBackend(*T, createSimAsmBackend);
+
+    // Register the object target streamer.
+    TargetRegistry::RegisterObjectTargetStreamer(*T,
+                                                 createObjectTargetStreamer);
+
+    // Register the asm streamer.
+    TargetRegistry::RegisterAsmTargetStreamer(*T, createTargetAsmStreamer);
+
+    // Register the MCInstPrinter
+    TargetRegistry::RegisterMCInstPrinter(*T, createSimMCInstPrinter);
 }

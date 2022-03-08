@@ -25,8 +25,26 @@ include "SimRegisterInfo.td"
 // Calling Conv, Instruction Descriptions
 //===----------------------------------------------------------------------===//
 
+include "SimCallingConv.td"
 include "SimInstrInfo.td"
+
 def SimInstrInfo : InstrInfo;
+
+def SimAsmParser : AsmParser {
+  bit ShouldEmitMatchRegisterName = 0;
+}
+// TODO: decide if SimAsmParserVariant is required
+def SimAsmParserVariant : AsmParserVariant {
+  let RegisterPrefix = "%";
+}
+
+def : Processor<"Sim", NoItineraries, []>;
+
+def SimAsmWriter : AsmWriter {
+  string AsmWriterClassName  = "InstPrinter";
+  int PassSubtarget = 1;
+  int Variant = 0;
+}
 
 //===----------------------------------------------------------------------===//
 // Sim processors supported.
@@ -38,4 +56,8 @@ def SimInstrInfo : InstrInfo;
 // const char *SimInstPrinter::getRegisterName(unsigned RegNo) {...}
 def Sim : Target {
   let InstructionSet = SimInstrInfo;
+  let AssemblyParsers  = [SimAsmParser];
+  let AssemblyParserVariants  = [SimAsmParserVariant];
+  let AssemblyWriters = [SimAsmWriter];
+  let AllowRegisterRenaming = 1;
 }
