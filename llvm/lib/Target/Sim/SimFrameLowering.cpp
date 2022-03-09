@@ -109,13 +109,14 @@ void SimFrameLowering::emitPrologue(MachineFunction &MF,
 
     unsigned SAVEri = 0; // SIM::SAVEri;
     unsigned SAVErr = 0; // SIM::SAVErr;
-    if (FuncInfo->isLeafProc()) {
-        if (NumBytes == 0) {
-            return;
-        }
-        SAVEri = SIM::ADDi;
-        SAVErr = SIM::ADD;
-    }
+    // TODO: resolve
+    // if (FuncInfo->isLeafProc()) {
+    //     if (NumBytes == 0) {
+    //         return;
+    //     }
+    //     SAVEri = SIM::ADDi;
+    //     SAVErr = SIM::ADD;
+    // }
 
     // Add the extra call frame stack size, if needed. (This is the same
     // code as in PrologEpilogInserter, but also gets disabled by
@@ -144,10 +145,6 @@ eliminateCallFramePseudoInstr(MachineFunction &MF, MachineBasicBlock &MBB,
   if (!hasReservedCallFrame(MF)) {
     MachineInstr &MI = *I;
     int Size = MI.getOperand(0).getImm();
-    // TODO: delete it
-    // if (MI.getOpcode() == SIM::ADJCALLSTACKDOWN)
-    //   Size = -Size;
-
     if (Size)
       emitSPAdjustment(MF, MBB, I, Size, SIM::ADD, SIM::ADDi);
   }
@@ -163,12 +160,12 @@ void SimFrameLowering::emitEpilogue(MachineFunction &MF,
     DebugLoc dl = MBBI->getDebugLoc();
     assert(MBBI->getOpcode() == SIM::RET &&
            "Can only put epilog before 'ret' instruction!");
-    if (!FuncInfo->isLeafProc()) {
-        // TODO: implement it
-        // BuildMI(MBB, MBBI, dl, TII.get(SIM::RESTORErr), SIM::G0).addReg(SIM::G0)
-        //     .addReg(SIM::G0);
-        return;
-    }
+    // TODO: resolve
+    // if (!FuncInfo->isLeafProc()) {
+    //     BuildMI(MBB, MBBI, dl, TII.get(SIM::RESTORErr), SIM::G0).addReg(SIM::G0)
+    //         .addReg(SIM::G0);
+    //     return;
+    // }
     MachineFrameInfo &MFI = MF.getFrameInfo();
 
     int NumBytes = (int) MFI.getStackSize();
@@ -209,14 +206,15 @@ SimFrameLowering::getFrameIndexReference(const MachineFunction &MF, int FI,
   // %fp, or positive offsets from %sp.
   bool UseFP;
 
+  // TODO: resolve
   // Sim uses FP-based references in general, even when "hasFP" is
   // false. That function is rather a misnomer, because %fp is
   // actually always available, unless isLeafProc.
-  if (FuncInfo->isLeafProc()) {
+  /*if (FuncInfo->isLeafProc()) {
     // If there's a leaf proc, all offsets need to be %sp-based,
     // because we haven't caused %fp to actually point to our frame.
     UseFP = false;
-  } else if (isFixed) {
+  } else*/ if (isFixed) {
     // Otherwise, argument access should always use %fp.
     UseFP = true;
   } else if (RegInfo->hasStackRealignment(MF)) {
@@ -255,21 +253,21 @@ static bool LLVM_ATTRIBUTE_UNUSED verifyLeafProcRegUse(MachineRegisterInfo *MRI)
   return true;
 }
 
-bool SimFrameLowering::isLeafProc(MachineFunction &MF) const
-{
+// TODO: resolve
+// bool SimFrameLowering::isLeafProc(MachineFunction &MF) const
+// {
 
-  MachineRegisterInfo &MRI = MF.getRegInfo();
-  MachineFrameInfo    &MFI = MF.getFrameInfo();
+//   MachineRegisterInfo &MRI = MF.getRegInfo();
+//   MachineFrameInfo    &MFI = MF.getFrameInfo();
 
-  return !(MFI.hasCalls()                  // has calls
-           // || MRI.isPhysRegUsed(SIM::L0)    // Too many registers needed
-           || MRI.isPhysRegUsed(SIM::R15)    // %sp is used
-           || hasFP(MF));                  // need %fp
-}
+//   return !(MFI.hasCalls()                  // has calls
+//            // || MRI.isPhysRegUsed(SIM::L0)    // Too many registers needed
+//            || MRI.isPhysRegUsed(SIM::R15)    // %sp is used
+//            || hasFP(MF));                  // need %fp
+// }
 
-void SimFrameLowering::remapRegsForLeafProc(MachineFunction &MF) const {
-  // TODO: implement it
-  return;
+// TODO: resolve
+// void SimFrameLowering::remapRegsForLeafProc(MachineFunction &MF) const {
 //   MachineRegisterInfo &MRI = MF.getRegInfo();
 //   // Remap %i[0-7] to %o[0-7].
 //   for (unsigned reg = SIM::I0; reg <= SIM::I7; ++reg) {
@@ -309,17 +307,17 @@ void SimFrameLowering::remapRegsForLeafProc(MachineFunction &MF) const {
 // #ifdef EXPENSIVE_CHECKS
 //     MF.verify(0, "After LeafProc Remapping");
 // #endif
-}
+// }
 
 void SimFrameLowering::determineCalleeSaves(MachineFunction &MF,
                                               BitVector &SavedRegs,
                                               RegScavenger *RS) const {
     TargetFrameLowering::determineCalleeSaves(MF, SavedRegs, RS);
-    if (!DisableLeafProc && isLeafProc(MF)) {
-        SimMachineFunctionInfo *MFI = MF.getInfo<SimMachineFunctionInfo>();
-        MFI->setLeafProc(true);
+    // TODO: resolve
+    // if (!DisableLeafProc && isLeafProc(MF)) {
+    //     SimMachineFunctionInfo *MFI = MF.getInfo<SimMachineFunctionInfo>();
+    //     MFI->setLeafProc(true);
 
-        remapRegsForLeafProc(MF);
-    }
-
+    //     remapRegsForLeafProc(MF);
+    // }
 }

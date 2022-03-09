@@ -49,11 +49,6 @@ public:
   bool targetHandlesStackFrameRounding() const override { return true; }
 
 private:
-  // Remap input registers to output registers for leaf procedure.
-  void remapRegsForLeafProc(MachineFunction &MF) const;
-
-  // Returns true if MF is a leaf procedure.
-  bool isLeafProc(MachineFunction &MF) const;
 
   // Emits code for adjusting SP in function prologue/epilogue.
   void emitSPAdjustment(MachineFunction &MF,
