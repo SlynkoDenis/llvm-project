@@ -19,6 +19,7 @@
 
 namespace llvm {
 
+class MachineFunction;
 class SimSubtarget;
 
 class SimFrameLowering : public TargetFrameLowering {
@@ -54,7 +55,9 @@ private:
   void emitSPAdjustment(MachineFunction &MF,
                         MachineBasicBlock &MBB,
                         MachineBasicBlock::iterator MBBI,
-                        int NumBytes, unsigned ADDrr, unsigned ADDri) const;
+                        int NumBytes) const;
+
+  const SimSubtarget &ST;
 };
 
 } // End llvm namespace

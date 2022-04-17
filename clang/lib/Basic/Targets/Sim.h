@@ -24,7 +24,7 @@ class LLVM_LIBRARY_VISIBILITY SimTargetInfo : public TargetInfo {
 public:
   SimTargetInfo(const llvm::Triple &Triple, const TargetOptions &)
       : TargetInfo(Triple) {
-    resetDataLayout("e-m:e-S32");   // little-endian; elf names mangling; 32 bits stack alignment 
+    resetDataLayout("e-m:e-p:32:32-i1:8:32-i8:8:32-i16:16:32-i32:32:32-i64:32-f32:32:32-f64:32-n32"); 
   }
 
   ArrayRef<const char *> getGCCRegNames() const override;

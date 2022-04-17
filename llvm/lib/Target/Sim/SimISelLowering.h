@@ -20,6 +20,7 @@
 namespace llvm {
 
 class SimSubtarget;
+class SimTargetMachine;
 
 namespace SIMISD {
   enum NodeType : unsigned {
@@ -38,12 +39,9 @@ namespace SIMISD {
     FTOX,        // FP to Int64 within a FP register.
     XTOF,        // Int64 to FP within a FP register.
     CALL,        // A call instruction.
-    RET_FLAG,    // Return with a flag operand.
+    RET,         // Return with a flag operand.
     GLOBAL_BASE_REG, // Global base reg for PIC.
     FLUSHW,      // FLUSH register windows to stack.
-    TLS_ADD,     // For Thread Local Storage (TLS).
-    TLS_LD,
-    TLS_CALL
   };
 }
 
@@ -53,47 +51,10 @@ public:
     SimTargetLowering(const TargetMachine &TM, const SimSubtarget &STI);
     SDValue LowerOperation(SDValue Op, SelectionDAG &DAG) const override;
 
-    bool useSoftFloat() const override;
-
-    /// computeKnownBitsForTargetNode - Determine which of the bits specified
-    /// in Mask are known to be either zero or one and return them in the
-    /// KnownZero/KnownOne bitsets.
-    void computeKnownBitsForTargetNode(const SDValue Op,
-                                       KnownBits &Known,
-                                       const APInt &DemandedElts,
-                                       const SelectionDAG &DAG,
-                                       unsigned Depth = 0) const override;
-
-    MachineBasicBlock *
-    EmitInstrWithCustomInserter(MachineInstr &MI,
-                                MachineBasicBlock *MBB) const override;
-
-    ConstraintType getConstraintType(StringRef Constraint) const override;
-    ConstraintWeight
-    getSingleConstraintMatchWeight(AsmOperandInfo &info,
-                                   const char *constraint) const override;
-    void LowerAsmOperandForConstraint(SDValue Op,
-                                      std::string &Constraint,
-                                      std::vector<SDValue> &Ops,
-                                      SelectionDAG &DAG) const override;
-
-    std::pair<unsigned, const TargetRegisterClass *>
-    getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
-                                 StringRef Constraint, MVT VT) const override;
-
-    bool isOffsetFoldingLegal(const GlobalAddressSDNode *GA) const override;
-    MVT getScalarShiftAmountTy(const DataLayout &, EVT) const override {
-      return MVT::i32;
-    }
-
     const char *getTargetNodeName(unsigned Opcode) const override;
 
     Register getRegisterByName(const char* RegName, LLT VT,
                                const MachineFunction &MF) const override;
-
-    /// Override to support customized stack guard loading.
-    bool useLoadStackGuardNode() const override;
-    void insertSSPDeclarations(Module &M) const override;
 
     /// getSetCCResultType - Return the ISD::SETCC ValueType
     EVT getSetCCResultType(const DataLayout &DL, LLVMContext &Context,
@@ -113,50 +74,25 @@ public:
                         const SmallVectorImpl<SDValue> &OutVals,
                         const SDLoc &dl, SelectionDAG &DAG) const override;
 
-    SDValue LowerGlobalAddress(SDValue Op, SelectionDAG &DAG) const;
-    SDValue LowerGlobalTLSAddress(SDValue Op, SelectionDAG &DAG) const;
-    SDValue LowerConstantPool(SDValue Op, SelectionDAG &DAG) const;
-    SDValue LowerBlockAddress(SDValue Op, SelectionDAG &DAG) const;
+    // SDValue withTargetFlags(SDValue Op, unsigned TF, SelectionDAG &DAG) const;
+    // SDValue makeHiLoPair(SDValue Op, unsigned HiTF, unsigned LoTF,
+    //                      SelectionDAG &DAG) const;
+    // SDValue makeAddress(SDValue Op, SelectionDAG &DAG) const;
 
-    SDValue withTargetFlags(SDValue Op, unsigned TF, SelectionDAG &DAG) const;
-    SDValue makeHiLoPair(SDValue Op, unsigned HiTF, unsigned LoTF,
-                         SelectionDAG &DAG) const;
-    SDValue makeAddress(SDValue Op, SelectionDAG &DAG) const;
+    // SDValue LowerF128Op(SDValue Op, SelectionDAG &DAG,
+    //                     const char *LibFuncName,
+    //                     unsigned numArgs) const;
 
-    SDValue LowerF128Op(SDValue Op, SelectionDAG &DAG,
-                        const char *LibFuncName,
-                        unsigned numArgs) const;
+    // SDValue PerformBITCASTCombine(SDNode *N, DAGCombinerInfo &DCI) const;
 
-    SDValue LowerINTRINSIC_WO_CHAIN(SDValue Op, SelectionDAG &DAG) const;
-
-    SDValue PerformBITCASTCombine(SDNode *N, DAGCombinerInfo &DCI) const;
-
-    SDValue bitcastConstantFPToInt(ConstantFPSDNode *C, const SDLoc &DL,
-                                   SelectionDAG &DAG) const;
+    // SDValue bitcastConstantFPToInt(ConstantFPSDNode *C, const SDLoc &DL,
+    //                                SelectionDAG &DAG) const;
 
     SDValue PerformDAGCombine(SDNode *N, DAGCombinerInfo &DCI) const override;
-
-    bool ShouldShrinkFPConstant(EVT VT) const override {
-      // Do not shrink FP constpool if VT == MVT::f128.
-      // (ldd, call _Q_fdtoq) is more expensive than two ldds.
-      return VT != MVT::f128;
-    }
-
-    bool shouldInsertFencesForAtomic(const Instruction *I) const override {
-      // FIXME: We insert fences for each atomics and generate
-      // sub-optimal code for PSO/TSO. (Approximately nobody uses any
-      // mode but TSO, which makes this even more silly)
-      return true;
-    }
-
-    AtomicExpansionKind shouldExpandAtomicRMWInIR(AtomicRMWInst *AI) const override;
 
     void ReplaceNodeResults(SDNode *N,
                             SmallVectorImpl<SDValue>& Results,
                             SelectionDAG &DAG) const override;
-
-    MachineBasicBlock *expandSelectCC(MachineInstr &MI, MachineBasicBlock *BB,
-                                      unsigned BROpcode) const;
 };
 } // end namespace llvm
 

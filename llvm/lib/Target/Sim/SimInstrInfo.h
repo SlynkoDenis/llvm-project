@@ -1,4 +1,4 @@
-//===-- SimInstrInfo.h - Sim Instruction Information --------*- C++ -*-===//
+//===-- SimInstrInfo.h - Sim Instruction Information --------*- C++ -*-----===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -14,6 +14,7 @@
 #define LLVM_LIB_TARGET_SIM_SIMINSTRINFO_H
 
 #include "SimRegisterInfo.h"
+#include "MCTargetDesc/SimInfo.h"
 #include "llvm/CodeGen/TargetInstrInfo.h"
 
 #define GET_INSTRINFO_HEADER
@@ -39,6 +40,7 @@ class SimInstrInfo : public SimGenInstrInfo {
   const SimRegisterInfo RI;
   const SimSubtarget& Subtarget;
   virtual void anchor();
+
 public:
   explicit SimInstrInfo(SimSubtarget &ST);
 
@@ -84,6 +86,8 @@ public:
                    const DebugLoc &DL, MCRegister DestReg, MCRegister SrcReg,
                    bool KillSrc) const override;
 
+  const MCInstrDesc &getBranchFromCond(SimCC::CondCodes CC) const;
+
   void storeRegToStackSlot(MachineBasicBlock &MBB,
                            MachineBasicBlock::iterator MBBI,
                            Register SrcReg, bool isKill, int FrameIndex,
@@ -96,12 +100,9 @@ public:
                             const TargetRegisterClass *RC,
                             const TargetRegisterInfo *TRI) const override;
 
-  Register getGlobalBaseReg(MachineFunction *MF) const;
-
   // Lower pseudo instructions after register allocation.
-  bool expandPostRAPseudo(MachineInstr &MI) const override;
+  // bool expandPostRAPseudo(MachineInstr &MI) const override;
 };
-
 }
 
 #endif  // LLVM_LIB_TARGET_SIM_SIMINSTRINFO_H

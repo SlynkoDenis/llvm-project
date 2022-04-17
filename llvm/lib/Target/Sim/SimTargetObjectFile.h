@@ -15,7 +15,6 @@ namespace llvm {
 class SimTargetObjectFile : public TargetLoweringObjectFileELF {
     MCSection *SmallDataSection;
     MCSection *SmallBSSSection;
-    unsigned SSThreshold = 8;
 
 public:
     void Initialize(MCContext &Ctx, const TargetMachine &TM) override;

@@ -29,18 +29,25 @@ using namespace llvm;
 // #define DEBUG_TYPE "Sim"
 
 static std::string computeDataLayout() {
-  std::string Ret = "E";
-  Ret += "-m:e";
+  // little endian
+  std::string Ret = "e-m:e";
 
   // Some ABIs have 32bit pointers.
   Ret += "-p:32:32";
 
-  // Alignments for 64 bit integers.
-  Ret += "-i64:64";
+  // Alignments for 1/8/16/32 bit integers.
+  Ret += "-i1:8:32";
+  Ret += "-i8:8:32";
+  Ret += "-i16:16:32";
+  Ret += "-i32:32:32";
 
-  Ret += "-f128:64-n32";
+  // Break 64 bit integers into two
+  Ret += "-i64:32";
 
-  Ret += "-S64";
+  Ret += "-f32:32:32";
+  Ret += "-f64:32";
+
+  Ret += "-n32";
 
   return Ret;
 }
@@ -66,35 +73,6 @@ SimTargetMachine::SimTargetMachine(
       TLOF(std::make_unique<SimTargetObjectFile>()),
       Subtarget(TT, std::string(CPU), std::string(FS), *this) {
   initAsmInfo();
-}
-
-const SimSubtarget *
-SimTargetMachine::getSubtargetImpl(const Function &F) const {
-  Attribute CPUAttr = F.getFnAttribute("target-cpu");
-  Attribute FSAttr = F.getFnAttribute("target-features");
-
-  std::string CPU =
-      CPUAttr.isValid() ? CPUAttr.getValueAsString().str() : TargetCPU;
-  std::string FS =
-      FSAttr.isValid() ? FSAttr.getValueAsString().str() : TargetFS;
-
-  // FIXME: This is related to the code below to reset the target options,
-  // we need to know whether or not the soft float flag is set on the
-  // function, so we can enable it as a subtarget feature.
-  bool softFloat = F.getFnAttribute("use-soft-float").getValueAsBool();
-
-  if (softFloat)
-    FS += FS.empty() ? "+soft-float" : ",+soft-float";
-
-  auto &I = SubtargetMap[CPU + FS];
-  if (!I) {
-    // This needs to be done before we create a new subtarget since any
-    // creation will depend on the TM and the code generation flags on the
-    // function that reside in TargetOptions.
-    resetTargetOptions(F);
-    I = std::make_unique<SimSubtarget>(TargetTriple, CPU, FS, *this);
-  }
-  return I.get();
 }
 }   // llvm
 

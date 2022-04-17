@@ -15,6 +15,7 @@ tablegen(LLVM SimGenInstrInfo.inc -gen-instr-info)
 tablegen(LLVM SimGenMCCodeEmitter.inc -gen-emitter)
 tablegen(LLVM SimGenRegisterInfo.inc -gen-register-info)
 tablegen(LLVM SimGenSubtargetInfo.inc -gen-subtarget)
+tablegen(LLVM SimGenMCPseudoLowering.inc -gen-pseudo-lowering)
 
 # SimCommonTableGen must be defined
 add_public_tablegen_target(SimCommonTableGen)
@@ -31,6 +32,7 @@ add_llvm_target(SimCodeGen
   SimInstrInfo.cpp
   SimRegisterInfo.cpp
   SimISelDAGToDAG.cpp
+  Sim.cpp
 
   # TODO: remove
   # Analysis
@@ -50,6 +52,6 @@ add_llvm_target(SimCodeGen
   Sim
   )
 
-add_subdirectory(AsmParser)
+# add_subdirectory(AsmParser)
 add_subdirectory(TargetInfo)
 add_subdirectory(MCTargetDesc)

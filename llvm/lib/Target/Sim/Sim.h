@@ -12,16 +12,37 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_LIB_TARGET_Sim_Sim_H
-#define LLVM_LIB_TARGET_Sim_Sim_H
+#ifndef LLVM_LIB_TARGET_SIM_SIM_H
+#define LLVM_LIB_TARGET_SIM_SIM_H
 
 #include "MCTargetDesc/SimMCTargetDesc.h"
 #include "llvm/Target/TargetMachine.h"
+#include "llvm/CodeGen/MachineInstr.h"
+#include "llvm/CodeGen/AsmPrinter.h"
+#include "llvm/Pass.h"
 
 namespace llvm {
-  class SimTargetMachine;
-  class FunctionPass;
+class SimTargetMachine;
+
+bool lowerSimMachineInstrToMCInst(const MachineInstr *MI, MCInst &OutMI,
+                                  AsmPrinter &AP);
+bool lowerSimMachineOperandToMCOperand(const MachineOperand &MO,
+                                       MCOperand &MCOp, const AsmPrinter &AP);
+
+FunctionPass *createSimISelDag(SimTargetMachine &TM,
+                               CodeGenOpt::Level OptLevel);
+
+namespace SIM {
+// Similar to RISC-V
+enum {
+  RA = SIM::R0,
+  SP = SIM::R1,
+  GP = SIM::R2,
+  FP = SIM::R3,
+  BP = SIM::R4,
+};
+} // end namespace SIM;
 
 } // end namespace llvm;
 
-#endif
+#endif  // LLVM_LIB_TARGET_SIM_SIM_H

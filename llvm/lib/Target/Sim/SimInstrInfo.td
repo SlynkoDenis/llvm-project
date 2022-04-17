@@ -18,14 +18,25 @@
 def SDT_SimRet          : SDTypeProfile<0, 1, [SDTCisInt<0>]>;
 
 // Return
-def SimRet : SDNode<"SimISD::Ret", SDTNone,
+def SimRet : SDNode<"SimISD::RET", SDTNone,
                      [SDNPHasChain, SDNPOptInGlue, SDNPVariadic]>;
+
+def SDT_SimCall         : SDTypeProfile<0, -1, [SDTCisVT<0, i32>]>;
+def SDT_SimCallSeqStart : SDCallSeqStart<[ SDTCisVT<0, i32>,
+                                           SDTCisVT<1, i32> ]>;
+def SDT_SimCallSeqEnd   : SDCallSeqEnd<[ SDTCisVT<0, i32>,
+                                         SDTCisVT<1, i32> ]>;
+
+def callseq_start : SDNode<"ISD::CALLSEQ_START", SDT_SimCallSeqStart,
+                           [SDNPHasChain, SDNPOutGlue]>;
+def callseq_end   : SDNode<"ISD::CALLSEQ_END",   SDT_SimCallSeqEnd,
+                           [SDNPHasChain, SDNPOptInGlue, SDNPOutGlue]>;
 
 //===----------------------------------------------------------------------===//
 // Instruction format superclass
 //===----------------------------------------------------------------------===//
 
-include "SimInstrFormats.td";
+include "SimInstrFormats.td"
 
 //===----------------------------------------------------------------------===//
 // Sim Operand, Complex Patterns and Transformations Definitions.
@@ -112,16 +123,38 @@ def SHRAi    : ALU_ri<0x56, "SHRAi">;
 def MOV      : SimInst<0x10, (outs GPR:$r1), (ins GPR:$r2), "MOV\t$r1, $r2", []> {
   let r3_imm = 0;
 }
-def MOVli    : SimInst<0x11, (outs GPR:$r1), (ins GPR:$imm12), "MOVli\t$r1, $imm12", []> {
+def MOVli    : SimInst<0x11, (outs GPR:$r1), (ins GPR:$imm16), "MOVli\t$r1, $imm16", []> {
   let r2 = 0;
 }
-def MOVhi    : SimInst<0x12, (outs GPR:$r1), (ins GPR:$imm12), "MOVhi\t$r1, $imm12", []> {
+def MOVhi    : SimInst<0x12, (outs GPR:$r1), (ins GPR:$imm16), "MOVhi\t$r1, $imm16", []> {
   let r2 = 0;
 }
 
 
+def B        : SimInst<0x02, (outs), (ins GPR:$imm16), "B\t$imm16", []>;
 def BEQ      : BCOND<0x06, "BEQ">;
 def BNE      : BCOND<0x07, "BNE">;
 def BGT      : BCOND<0x08, "BGT">;
 def BLE      : BCOND<0x09, "BLE">;
 def BR       : SimInstBranch<0x05, (outs), (ins GPR:$r1), "BR">;
+
+
+// def LD       : SimInst<0x70, (outs GPR:$r1), (ins GPR:$r2, GPR:$imm16), "LD\t$r1, $r2, $imm16", []>;
+def LD       : ALU_ri<0x70, "LD">;
+def LDi      : ALU_ri<0x72, "LDi">;
+
+def ST       : STORE<0x71, "ST">;
+def STi      : STORE<0x73, "STi">;
+
+//===----------------------------------------------------------------------===//
+// Pseudo Instructions
+//===----------------------------------------------------------------------===//
+
+let Defs = [R2], Uses = [R2] in {
+def ADJCALLSTACKDOWN : SimPseudoInst<(outs), (ins i32imm:$amt, i32imm:$amt2),
+                               "# ADJCALLSTACKDOWN $amt, $amt2",
+                               [(callseq_start timm:$amt, timm:$amt2)]>;
+def ADJCALLSTACKUP : SimPseudoInst<(outs), (ins i32imm:$amt1, i32imm:$amt2),
+                            "# ADJCALLSTACKUP $amt1",
+                            [(callseq_end timm:$amt1, timm:$amt2)]>;
+}

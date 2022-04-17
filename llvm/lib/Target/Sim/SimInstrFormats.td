@@ -49,8 +49,8 @@ class SimInst<bits<8> op, dag outs, dag ins, string asmstr,
   let Itinerary = itin;
 }
 
-class ALU_ri<bits<8> opcode, string asmstr> : SimInst<opcode, (outs GPR:$r1), (ins GPR:$r2, GPR:$imm12),
-                                                      asmstr # "\t" # "$r1, $r2, $imm12", []>;
+class ALU_ri<bits<8> opcode, string asmstr> : SimInst<opcode, (outs GPR:$r1), (ins GPR:$r2, GPR:$imm16),
+                                                      asmstr # "\t" # "$r1, $r2, $imm16", []>;
 
 
 class SimInstRegister<bits<8> opcode, dag outs,
@@ -68,5 +68,15 @@ class ALU_rr<bits<8> opcode, string asmstr> : SimInstRegister<opcode, (outs GPR:
 class SimInstBranch<bits<8> opcode, dag outs,
                      dag ins, string asmstr> : SimInst<opcode, outs, ins, asmstr, []>;
 
-class BCOND<bits<8> opcode, string asmstr> : SimInstBranch<opcode, (outs), (ins GPR:$r1, GPR:$r2, GPR:$imm12),
-                                                           asmstr # "\t" # "$r1, $r2, $imm12">
+class BCOND<bits<8> opcode, string asmstr> : SimInstBranch<opcode, (outs), (ins GPR:$r1, GPR:$r2, GPR:$imm16),
+                                                           asmstr # "\t" # "$r1, $r2, $imm16">;
+
+class STORE<bits<8> opcode, string asmstr> : SimInstRegister<opcode, (outs), (ins GPR:$r1, GPR:$r2, GPR:$r3),
+                                                             asmstr # "\t" # "$r1, $r2, $r3">;
+
+// Pseudo instructions format
+class SimPseudoInst<dag outs, dag ins, string asmstr, list<dag> pattern>
+   : SimInst<0, outs, ins, asmstr, pattern> {
+  let isPseudo = 1;
+  let isCodeGenOnly = 1;
+}

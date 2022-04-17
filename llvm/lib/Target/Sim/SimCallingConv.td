@@ -29,5 +29,4 @@ def RetCC_Sim : CallingConv<[
   CCIfType<[f32], CCAssignToReg<[R2]>>
 ]>;
 
-// TODO: decide if it's needed
-def CSR_Sim : CalleeSavedRegs<(add (sequence "R%d", 0, 1), R15)>;
+def CSR_Sim : CalleeSavedRegs<(add R2, R3, (sequence "R%d", 5, 8))>;
