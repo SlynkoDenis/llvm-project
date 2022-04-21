@@ -62,10 +62,10 @@ unsigned SimInstrInfo::isLoadFromStackSlot(const MachineInstr &MI,
 unsigned SimInstrInfo::isStoreToStackSlot(const MachineInstr &MI,
                                             int &FrameIndex) const {
   if (MI.getOpcode() == SIM::STi) {
-    if (MI.getOperand(0).isFI() && MI.getOperand(1).isImm() &&
-        MI.getOperand(1).getImm() == 0) {
-      FrameIndex = MI.getOperand(0).getIndex();
-      return MI.getOperand(2).getReg();
+    if (MI.getOperand(1).isFI() && MI.getOperand(2).isImm() &&
+        MI.getOperand(2).getImm() == 0) {
+      FrameIndex = MI.getOperand(1).getIndex();
+      return MI.getOperand(0  ).getReg();
     }
   }
   return 0;
@@ -116,6 +116,7 @@ const MCInstrDesc &SimInstrInfo::getBranchFromCond(SimCC::CondCodes CC) const {
     return get(SIM::BLE);
   case SimCC::GT:
     return get(SIM::BGT);
+  // TODO: either add LEU/GTU conditions or delete it
   // case USimCC::LEU:
   //   return get(USim::BLEU);
   // case USimCC::GTU:
@@ -136,6 +137,7 @@ static SimCC::CondCodes getCondFromBranchOpcode(unsigned Opc) {
     return SimCC::LE;
   case SIM::BGT:
     return SimCC::GT;
+  // TODO: either add LEU/GTU conditions or delete it
   // case Sim::BLEU:
   //   return SimCC::LEU;
   // case Sim::BGTU:
@@ -306,90 +308,7 @@ void SimInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
         .addImm(0);
     return;
   }
-  llvm_unreachable("can't copyPhysReg");
-  // unsigned numSubRegs = 0;
-  // unsigned movOpc     = 0;
-  // const unsigned *subRegIdx = nullptr;
-  // bool ExtraG0 = false;
-
-  // const unsigned DW_SubRegsIdx[]  = { SIM::sub_even, SIM::sub_odd };
-  // const unsigned DFP_FP_SubRegsIdx[]  = { SIM::sub_even, SIM::sub_odd };
-  // const unsigned QFP_DFP_SubRegsIdx[] = { SIM::sub_even64, SIM::sub_odd64 };
-  // const unsigned QFP_FP_SubRegsIdx[]  = { SIM::sub_even, SIM::sub_odd,
-  //                                         SIM::sub_odd64_then_sub_even,
-  //                                         SIM::sub_odd64_then_sub_odd };
-
-  // if (SIM::IntRegsRegClass.contains(DestReg, SrcReg))
-  //   BuildMI(MBB, I, DL, get(SIM::ORrr), DestReg).addReg(SIM::G0)
-  //     .addReg(SrcReg, getKillRegState(KillSrc));
-  // else if (SIM::IntPairRegClass.contains(DestReg, SrcReg)) {
-  //   subRegIdx  = DW_SubRegsIdx;
-  //   numSubRegs = 2;
-  //   movOpc     = SIM::ORrr;
-  //   ExtraG0 = true;
-  // } else if (SIM::FPRegsRegClass.contains(DestReg, SrcReg))
-  //   BuildMI(MBB, I, DL, get(SIM::FMOVS), DestReg)
-  //     .addReg(SrcReg, getKillRegState(KillSrc));
-  // else if (SIM::DFPRegsRegClass.contains(DestReg, SrcReg)) {
-  //   if (Subtarget.isV9()) {
-  //     BuildMI(MBB, I, DL, get(SIM::FMOVD), DestReg)
-  //       .addReg(SrcReg, getKillRegState(KillSrc));
-  //   } else {
-  //     // Use two FMOVS instructions.
-  //     subRegIdx  = DFP_FP_SubRegsIdx;
-  //     numSubRegs = 2;
-  //     movOpc     = SIM::FMOVS;
-  //   }
-  // } else if (SIM::QFPRegsRegClass.contains(DestReg, SrcReg)) {
-  //   if (Subtarget.isV9()) {
-  //     if (Subtarget.hasHardQuad()) {
-  //       BuildMI(MBB, I, DL, get(SIM::FMOVQ), DestReg)
-  //         .addReg(SrcReg, getKillRegState(KillSrc));
-  //     } else {
-  //       // Use two FMOVD instructions.
-  //       subRegIdx  = QFP_DFP_SubRegsIdx;
-  //       numSubRegs = 2;
-  //       movOpc     = SIM::FMOVD;
-  //     }
-  //   } else {
-  //     // Use four FMOVS instructions.
-  //     subRegIdx  = QFP_FP_SubRegsIdx;
-  //     numSubRegs = 4;
-  //     movOpc     = SIM::FMOVS;
-  //   }
-  // } else if (SIM::ASRRegsRegClass.contains(DestReg) &&
-  //            SIM::IntRegsRegClass.contains(SrcReg)) {
-  //   BuildMI(MBB, I, DL, get(SIM::WRASRrr), DestReg)
-  //       .addReg(SIM::G0)
-  //       .addReg(SrcReg, getKillRegState(KillSrc));
-  // } else if (SIM::IntRegsRegClass.contains(DestReg) &&
-  //            SIM::ASRRegsRegClass.contains(SrcReg)) {
-  //   BuildMI(MBB, I, DL, get(SIM::RDASR), DestReg)
-  //       .addReg(SrcReg, getKillRegState(KillSrc));
-  // } else
-  //   llvm_unreachable("Impossible reg-to-reg copy");
-
-  // if (numSubRegs == 0 || subRegIdx == nullptr || movOpc == 0)
-  //   return;
-
-  // const TargetRegisterInfo *TRI = &getRegisterInfo();
-  // MachineInstr *MovMI = nullptr;
-
-  // for (unsigned i = 0; i != numSubRegs; ++i) {
-  //   Register Dst = TRI->getSubReg(DestReg, subRegIdx[i]);
-  //   Register Src = TRI->getSubReg(SrcReg, subRegIdx[i]);
-  //   assert(Dst && Src && "Bad sub-register");
-
-  //   MachineInstrBuilder MIB = BuildMI(MBB, I, DL, get(movOpc), Dst);
-  //   if (ExtraG0)
-  //     MIB.addReg(SIM::G0);
-  //   MIB.addReg(Src);
-  //   MovMI = MIB.getInstr();
-  // }
-  // // Add implicit super-register defs and kills to the last MovMI.
-  // MovMI->addRegisterDefined(DestReg, TRI);
-  // if (KillSrc)
-  //   MovMI->addRegisterKilled(SrcReg, TRI);
+  llvm_unreachable("");
 }
 
 void SimInstrInfo::
@@ -436,20 +355,3 @@ loadRegFromStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
       .addImm(0)
       .addMemOperand(MMO);
 }
-
-// bool SimInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
-//   switch (MI.getOpcode()) {
-//   case TargetOpcode::LOAD_STACK_GUARD: {
-//     assert(Subtarget.isTargetLinux() &&
-//            "Only Linux target is expected to contain LOAD_STACK_GUARD");
-//     // offsetof(tcbhead_t, stack_guard) from sysdeps/Sim/nptl/tls.h in glibc.
-//     const int64_t Offset = Subtarget.is64Bit() ? 0x28 : 0x14;
-//     MI.setDesc(get(Subtarget.is64Bit() ? SIM::LDXri : SIM::LDri));
-//     MachineInstrBuilder(*MI.getParent()->getParent(), MI)
-//         .addReg(SIM::G7)
-//         .addImm(Offset);
-//     return true;
-//   }
-//   }
-//   return false;
-// }

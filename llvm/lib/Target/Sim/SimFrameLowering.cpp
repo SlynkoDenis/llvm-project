@@ -42,20 +42,47 @@ void SimFrameLowering::emitRegAdjustment(MachineBasicBlock &MBB,
                                          int NumBytes,
                                          MachineInstr::MIFlag Flag,
                                          Register Src, Register Dest) const {
+  DebugLoc dl;
+  const SimInstrInfo &TII =
+    *static_cast<const SimInstrInfo *>(ST.getInstrInfo());
 
-    DebugLoc dl;
-    const SimInstrInfo &TII =
-      *static_cast<const SimInstrInfo *>(ST.getInstrInfo());
-
-    assert(isInt<16>(NumBytes) && "Invalid SPAdjistment NumBytes argument value");
-    BuildMI(MBB, MBBI, dl, TII.get(SIM::ADDi), Dest)
-      .addReg(Src).addImm(NumBytes).setMIFlag(Flag);
-    return;
+  assert(isInt<16>(NumBytes) && "Invalid SPAdjistment NumBytes argument value");
+  BuildMI(MBB, MBBI, dl, TII.get(SIM::ADDi), Dest)
+    .addReg(Src).addImm(NumBytes).setMIFlag(Flag);
+  return;
 }
+
+// void SimFrameLowering::saveFP(MachineBasicBlock &MBB,
+//                               MachineBasicBlock::iterator MBBI,
+//                               int NumBytes) const {
+//   // MachineMemOperand *MMO = MF->getMachineMemOperand(
+//   //     MachinePointerInfo::getFixedStack(*MF, FI), MachineMemOperand::MOStore,
+//   //     MFI.getObjectSize(FI), MFI.getObjectAlign(FI));
+//   const SimInstrInfo &TII =
+//     *static_cast<const SimInstrInfo *>(ST.getInstrInfo());
+//   DebugLoc DL;
+//   BuildMI(MBB, MBBI, DL, TII.get(SIM::STi))
+//     .addReg(SIM::FP)
+//     .addReg(SIM::SP)
+//     .addImm(NumBytes);
+// }
+
+// void SimFrameLowering::restoreFP(MachineBasicBlock &MBB,
+//                                  MachineBasicBlock::iterator MBBI) const {
+//   // MachineMemOperand *MMO = MF->getMachineMemOperand(
+//   //     MachinePointerInfo::getFixedStack(*MF, FI), MachineMemOperand::MOStore,
+//   //     MFI.getObjectSize(FI), MFI.getObjectAlign(FI));
+//   const SimInstrInfo &TII =
+//     *static_cast<const SimInstrInfo *>(ST.getInstrInfo());
+//   DebugLoc DL;
+//   BuildMI(MBB, MBBI, DL, TII.get(SIM::LDi), SIM::FP)
+//     .addReg(SIM::SP)
+//     .addImm(-4);
+// }
 
 void SimFrameLowering::emitPrologue(MachineFunction &MF,
                                     MachineBasicBlock &MBB) const {
-    // SimMachineFunctionInfo *FuncInfo = MF.getInfo<SimMachineFunctionInfo>();
+    SimMachineFunctionInfo *FuncInfo = MF.getInfo<SimMachineFunctionInfo>();
 
     assert(&MF.front() == &MBB && "Shrink-wrapping not yet supported");
     MachineFrameInfo &MFI = MF.getFrameInfo();
@@ -68,6 +95,7 @@ void SimFrameLowering::emitPrologue(MachineFunction &MF,
     // Debug location must be unknown since the first debug location is used
     // to determine the end of the prologue.
     DebugLoc dl;
+  
     bool NeedsStackRealignment = RegInfo.shouldRealignStack(MF);
     if (NeedsStackRealignment && !RegInfo.canRealignStack(MF)) {
       report_fatal_error("Function \"" + Twine(MF.getName()) + "\" required "
@@ -77,33 +105,33 @@ void SimFrameLowering::emitPrologue(MachineFunction &MF,
 
     // Get the number of bytes to allocate from the FrameInfo
     auto NumBytes = alignTo(MFI.getStackSize(), getStackAlign());
+    // Update stack size with corrected value.
+    MFI.setStackSize(NumBytes);
     if (NumBytes == 0 && !MFI.adjustsStack()) {
       return;
     }
 
-    // Adds the Sim subtarget-specific spill area to the stack
-    // size. Also ensures target-required alignment.
-    // NumBytes = ST.getAdjustedFrameSize(NumBytes);
-
     // Finally, ensure that the size is sufficiently aligned for the
     // data on the stack.
-    NumBytes = alignTo(NumBytes, MFI.getMaxAlign());
+    // TODO: alignment to 8 bytes; delete it?
+    // NumBytes = alignTo(NumBytes, MFI.getMaxAlign());
 
-    // Update stack size with corrected value.
-    MFI.setStackSize(NumBytes);
-
+    // Adjust SP for the number of bytes required for this function
     emitRegAdjustment(MBB, MBBI, -NumBytes,
                       MachineInstr::FrameSetup,
                       SIM::SP, SIM::SP);
-
-    if (!hasFP(MF)) {
-      return;
-    }
     
     const auto &CSI = MFI.getCalleeSavedInfo();
     std::advance(MBBI, CSI.size());
 
-    emitRegAdjustment(MBB, MBBI, NumBytes,
+    if (!hasFP(MF)) {
+      return;
+    }
+
+    // saveFP(MBB, MBBI, NumBytes - 4);
+
+    // Set new FP value
+    emitRegAdjustment(MBB, MBBI, NumBytes - FuncInfo->getVarArgsSaveSize(),
                       MachineInstr::FrameSetup,
                       SIM::SP, SIM::FP);
 }
@@ -141,10 +169,59 @@ void SimFrameLowering::emitEpilogue(MachineFunction &MF,
       return;
     }
 
-    assert(hasFP(MF) && "must have FP!");
     assert(!(MFI.hasVarSizedObjects() && RI->hasStackRealignment(MF)) && "TBD");
 
+    // TODO: why can't we restore SP using the saved FP value?
     emitRegAdjustment(MBB, MBBI, NumBytes, MachineInstr::FrameDestroy, SIM::SP, SIM::SP);
+
+    if (!hasFP(MF)) {
+      return;
+    }
+
+    // restoreFP(MBB, MBBI);
+}
+
+bool SimFrameLowering::spillCalleeSavedRegisters(MachineBasicBlock &MBB,
+                                                 MachineBasicBlock::iterator MI,
+                                                 ArrayRef<CalleeSavedInfo> CSI,
+                                                 const TargetRegisterInfo *TRI) const {
+  if (CSI.empty()) {
+    return true;
+  }
+
+  const TargetInstrInfo &TII = *ST.getInstrInfo();
+
+  for (auto &CS : CSI) {
+    // Insert the spill to the stack frame.
+    Register Reg = CS.getReg();
+    const TargetRegisterClass *RC = TRI->getMinimalPhysRegClass(Reg);
+    TII.storeRegToStackSlot(MBB, MI, Reg, !MBB.isLiveIn(Reg), CS.getFrameIdx(),
+                            RC, TRI);
+  }
+
+  return true;
+}
+
+bool SimFrameLowering::restoreCalleeSavedRegisters(MachineBasicBlock &MBB,
+                                                   MachineBasicBlock::iterator MI,
+                                                   MutableArrayRef<CalleeSavedInfo> CSI,
+                                                   const TargetRegisterInfo *TRI) const {
+  if (CSI.empty()) {
+    return true;
+  }
+
+  const TargetInstrInfo &TII = *ST.getInstrInfo();
+
+  // Insert in reverse order.
+  // loadRegFromStackSlot can insert multiple instructions.
+  for (auto &CS : reverse(CSI)) {
+    Register Reg = CS.getReg();
+    const TargetRegisterClass *RC = TRI->getMinimalPhysRegClass(Reg);
+    TII.loadRegFromStackSlot(MBB, MI, Reg, CS.getFrameIdx(), RC, TRI);
+    assert(MI != MBB.begin() && "loadRegFromStackSlot didn't insert any code!");
+  }
+
+  return true;
 }
 
 // TODO: delete this function and usage
@@ -210,12 +287,25 @@ SimFrameLowering::getFrameIndexReference(const MachineFunction &MF, int FI,
   }
 }
 
+bool SimFrameLowering::hasBP(const MachineFunction &MF) const {
+  const MachineFrameInfo &MFI = MF.getFrameInfo();
+  const TargetRegisterInfo *TRI = ST.getRegisterInfo();
+
+  return MFI.hasVarSizedObjects() && TRI->hasStackRealignment(MF);
+}
+
 void SimFrameLowering::determineCalleeSaves(MachineFunction &MF,
                                               BitVector &SavedRegs,
                                               RegScavenger *RS) const {
-    TargetFrameLowering::determineCalleeSaves(MF, SavedRegs, RS);
-    if (hasFP(MF)) {
-      SavedRegs.set(SIM::SP);
-      // SavedRegs.set(SIM::FP);
-    }
+  TargetFrameLowering::determineCalleeSaves(MF, SavedRegs, RS);
+  // Unconditionally spill RA and FP only if the function uses a frame
+  // pointer.
+  if (hasFP(MF)) {
+    SavedRegs.set(SIM::RA);
+    SavedRegs.set(SIM::FP);
+  }
+  // Mark BP as used if function has dedicated base pointer.
+  if (hasBP(MF)) {
+    SavedRegs.set(SIM::BP);
+  }
 }

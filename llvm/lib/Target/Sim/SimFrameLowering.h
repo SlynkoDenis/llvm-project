@@ -38,11 +38,21 @@ public:
 
   bool hasReservedCallFrame(const MachineFunction &MF) const override;
   bool hasFP(const MachineFunction &MF) const override;
+  bool hasBP(const MachineFunction &MF) const;
   void determineCalleeSaves(MachineFunction &MF, BitVector &SavedRegs,
                             RegScavenger *RS = nullptr) const override;
 
   StackOffset getFrameIndexReference(const MachineFunction &MF, int FI,
                                      Register &FrameReg) const override;
+
+  bool spillCalleeSavedRegisters(MachineBasicBlock &MBB,
+                                 MachineBasicBlock::iterator MI,
+                                 ArrayRef<CalleeSavedInfo> CSI,
+                                 const TargetRegisterInfo *TRI) const override;
+  bool restoreCalleeSavedRegisters(MachineBasicBlock &MBB,
+                                   MachineBasicBlock::iterator MI,
+                                   MutableArrayRef<CalleeSavedInfo> CSI,
+                                   const TargetRegisterInfo *TRI) const override;
 
   /// targetHandlesStackFrameRounding - Returns true if the target is
   /// responsible for rounding up the stack frame (probably at emitPrologue
@@ -57,6 +67,13 @@ private:
                          int NumBytes,
                          MachineInstr::MIFlag Flag,
                          Register Src, Register Dest) const;
+
+  // void saveFP(MachineBasicBlock &MBB,
+  //             MachineBasicBlock::iterator MBBI,
+  //             int NumBytes) const;
+
+  // void restoreFP(MachineBasicBlock &MBB,
+  //                MachineBasicBlock::iterator MBBI) const;
 
   const SimSubtarget &ST;
 };

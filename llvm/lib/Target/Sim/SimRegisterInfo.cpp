@@ -33,7 +33,7 @@ static cl::opt<bool>
 ReserveAppRegisters("Sim-reserve-app-registers", cl::Hidden, cl::init(false),
                     cl::desc("Reserve application registers (%g2-%g4)"));
 
-SimRegisterInfo::SimRegisterInfo() : SimGenRegisterInfo(SIM::R1) {}
+SimRegisterInfo::SimRegisterInfo() : SimGenRegisterInfo(SIM::R0) {} // RA - R0
 
 const MCPhysReg*
 SimRegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
@@ -54,11 +54,16 @@ SimRegisterInfo::getRTCallPreservedMask(CallingConv::ID CC) const {
 BitVector SimRegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   BitVector Reserved(getNumRegs());
 
-  Reserved.set(SIM::R10);
-  Reserved.set(SIM::R11);
-  Reserved.set(SIM::R12);
-  Reserved.set(SIM::R13);
-  Reserved.set(SIM::R14);
+  // TODO: choose regs
+  Reserved.set(SIM::R0);
+  Reserved.set(SIM::R1);
+  Reserved.set(SIM::R2);
+  Reserved.set(SIM::R3);
+  // Reserved.set(SIM::R10);
+  // Reserved.set(SIM::R11);
+  // Reserved.set(SIM::R12);
+  // Reserved.set(SIM::R13);
+  // Reserved.set(SIM::R14);
 
   return Reserved;
 }

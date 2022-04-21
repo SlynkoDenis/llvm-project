@@ -37,6 +37,10 @@ def callseq_start : SDNode<"ISD::CALLSEQ_START", SDT_SimCallSeqStart,
 def callseq_end   : SDNode<"ISD::CALLSEQ_END",   SDT_SimCallSeqEnd,
                            [SDNPHasChain, SDNPOptInGlue, SDNPOutGlue]>;
 
+def SimCall       : SDNode<"SIMISD::CALL", SDT_SimCall,
+                           [SDNPHasChain, SDNPOptInGlue, SDNPOutGlue,
+                            SDNPVariadic]>;
+
 //===----------------------------------------------------------------------===//
 // Instruction format superclass
 //===----------------------------------------------------------------------===//
@@ -117,6 +121,26 @@ def BTARGET16 : Operand<OtherVT> {
   }];
   let OperandType = "OPERAND_PCREL";
 }
+
+// TODO: remove CTARGET16?
+def CTARGET16 : Operand<i32> {
+  let ParserMatchClass = ImmAsmOperand<"S", 16, "">;
+  let PrintMethod = "printBranchOperand";
+  let EncoderMethod = "getImmOpValue";
+  let DecoderMethod = "decodeSImmOperand<16>";
+  let MCOperandPredicate = [{
+    int64_t Imm;
+    if (MCOp.evaluateAsConstantImm(Imm))
+      return isInt<16>(Imm);
+    return MCOp.isBareSymbolRef();
+  }];
+  let OperandType = "OPERAND_PCREL";
+}
+
+// From RISCV
+def IsOrAdd: PatFrag<(ops node:$A, node:$B), (or node:$A, node:$B), [{
+  return isOrEquivalentToAdd(N);
+}]>;
 
 //===----------------------------------------------------------------------===//
 // Instructions specific format
@@ -201,205 +225,115 @@ def MOVhi    : SimInst<0x12, (outs GPR:$r1), (ins i32li16u:$imm16),
 }
 
 
-// def B : Instruction {
-//   let isTerminator = 1;
-//   let isBranch = 1;
-//   let isBarrier = 1;
-//   let Namespace = "SIM";
-//   let DecoderNamespace = "SIM";
-//   let Size = 4;
-
-//   field bits<32> Inst;
-
-//   bits<16> r3_imm;
-
-//   let Inst{31-24} = 0x02;
-//   let Inst{23-20} = 0;
-//   let Inst{19-16} = 0;
-//   let Inst{15-0}  = r3_imm;
-
-//   let OutOperandList = (outs);
-//   let InOperandList  = (ins UIMM16:$r3_imm);
-//   let AsmString   = "B\t$r3_imm";
-//   let Pattern     = [(br bb:$r3_imm)];
-
-//   let Itinerary = NoItinerary;
-// }
-
 let isTerminator = 1, isBranch = 1, isBarrier = 1 in {
 def B        : SimInst<0x02, (outs), (ins BTARGET16:$r3_imm), "B\t$r3_imm", [(br bb:$r3_imm)]> {
   let r1 = 0;
   let r2 = 0;
 }
-def BR       : SimInstBranch<0x05, (outs), (ins GPR:$r1), "BR", [(brind GPR:$r1)]>;
+def BR       : SimInstBranch<0x05, (outs), (ins GPR:$r1), "BR\t$r1", [(brind GPR:$r1)]>;
 def BEQ      : BCOND<0x06, "BEQ">;
 def BNE      : BCOND<0x07, "BNE">;
 def BGT      : BCOND<0x08, "BGT">;
 def BLE      : BCOND<0x09, "BLE">;
 }
 
-// def IsOrAdd: PatFrag<(ops node:$A, node:$B), (or node:$A, node:$B), [{
-//   return isOrEquivalentToAdd(N);
-// }]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, isCall = 1, isBranch = 1, isTerminator = 1 in {
+// def BR : SimInst<0x05, (outs), (ins GPR:$r1), "BR\t$r1",
+//                  [(brind GPR:$r1)]>;
+def BL : SimInst<0x03, (outs GPR:$r1), (ins CTARGET16:$r3_imm),
+                 "BL\t$r1, $r3_imm", []>;
+}
 
+//===----------------------------------------------------------------------===//
+// Loads definitions
+//===----------------------------------------------------------------------===//
 
-// def LDI: SimInst<0x0, (outs GPR:$rd), (ins GPR:$rs1, SIMM16:$imm),
-//               "ldi\t$rd, ${imm}(${rs1})",
-//               []>;
-// def : Pat<(i32 (load ADDRrr:$rs1)), (LDI ADDRrr:$rs1, 0)>;
-// def : Pat<(i32 (load (add ADDRrr:$rs1, SIMM16:$imm))),
-//           (LDI ADDRrr:$rs1, SIMM16:$imm)>;
-// def : Pat<(i32 (load (IsOrAdd ADDRri:$rs1, SIMM16:$imm))),
-//           (LDI ADDRri:$rs1, SIMM16:$imm)>;
+// let hasSideEffects = 0, mayLoad = 1, mayStore = 0 in
+// class Load_ri<string opcodestr>
+//     : SimInst<OPC_LOAD, (outs GPR:$rd), (ins GPR:$rs1, simm12:$imm12),
+//               opcodestr, "$rd, ${imm12}(${rs1})">;
 
-def LD : Instruction {
-  let Namespace = "SIM";
-  let DecoderNamespace = "SIM";
+// def LW  : Load_ri<"lw">, Sched<[WriteLDW, ReadMemBase]>;
+
+// multiclass LdPat<PatFrag LoadOp, RVInst Inst, ValueType vt = XLenVT> {
+//   def : Pat<(vt (LoadOp BaseAddr:$rs1)), (Inst BaseAddr:$rs1, 0)>;
+//   def : Pat<(vt (LoadOp (add BaseAddr:$rs1, simm12:$imm12))),
+//             (Inst BaseAddr:$rs1, simm12:$imm12)>;
+//   def : Pat<(vt (LoadOp (IsOrAdd AddrFI:$rs1, simm12:$imm12))),
+//             (Inst AddrFI:$rs1, simm12:$imm12)>;
+// }
+
+// defm : LdPat<load, LW, i32>, Requires<[IsRV32]>;
+
+def LD       : SimInst<0x70, (outs GPR:$r1), (ins GPR:$r2, GPR:$r3_imm),
+                       "LD\t$r1, $r2, $r3_imm",
+                       [(set GPR:$r1, (load (add ADDRrr:$r2, GPR:$r3_imm)))]> {
   let hasSideEffects = 0;
   let mayLoad = 1;
   let mayStore = 0;
-  let Size = 4;
-
-  field bits<32> Inst;
-
-  // bits<8> Opcode = 0x70;
-  bits<4>  r1;
-  bits<4>  r2;
-  bits<16> r3_imm;
-
-  let Inst{31-24} = 0x70;
-  let Inst{23-20} = r1;
-  let Inst{19-16} = r2;
-  let Inst{15-0}  = r3_imm;
-
-  let OutOperandList = (outs GPR:$r1);
-  let InOperandList  = (ins GPR:$r2, SIMM16:$r3_imm);
-  let AsmString   = "LD\t$r1, $r2, $r3_imm";
-  let Pattern     = [(set GPR:$r1, (load (add ADDRrr:$r2, SIMM16:$r3_imm)))];
-
-  let Itinerary = NoItinerary;
 }
 
-def LDi : Instruction {
-  let Namespace = "SIM";
-  let DecoderNamespace = "SIM";
+def LDi      : SimInst<0x72, (outs GPR:$r1), (ins GPR:$r2, SIMM16:$r3_imm),
+                       "LDi\t$r1, $r2, $r3_imm",
+                       [(set GPR:$r1, (load (IsOrAdd ADDRri:$r2, SIMM16:$r3_imm)))]> {
   let hasSideEffects = 0;
   let mayLoad = 1;
   let mayStore = 0;
-  let Size = 4;
-
-  field bits<32> Inst;
-
-  // bits<8> Opcode = 0x70;
-  bits<4>  r1;
-  bits<4>  r2;
-  bits<16> r3_imm;
-
-  let Inst{31-24} = 0x72;
-  let Inst{23-20} = r1;
-  let Inst{19-16} = r2;
-  let Inst{15-0}  = r3_imm;
-
-  let OutOperandList = (outs GPR:$r1);
-  let InOperandList  = (ins GPR:$r2, SIMM16:$r3_imm);
-  let AsmString   = "LDi\t$r1, $r2, $r3_imm";
-  let Pattern     = [(set GPR:$r1, (load (add ADDRri:$r2, SIMM16:$r3_imm)))];
-
-  let Itinerary = NoItinerary;
 }
 
-let hasSideEffects = 0, mayLoad = 1, mayStore = 0 in
+// TODO: reconstruct this pattern in a proper form
 def LDI_: SimInst<0x0, (outs GPR:$r1), (ins GPR:$r2, SIMM16:$r3_imm),
-                  "LDi\t$r1, ${r3_imm}(${r2})",
-                  []>;
+                  "LDi\t$r1, ${r2}, ${r3_imm}",
+                  []> {
+  let hasSideEffects = 0;
+  let mayLoad = 1;
+  let mayStore = 0;
+}
 def : Pat<(i32 (load ADDRrr:$r1)), (LDI_ ADDRrr:$r1, 0)>;
 
-def ST : Instruction {
-  let Namespace = "SIM";
-  let DecoderNamespace = "SIM";
+//===----------------------------------------------------------------------===//
+// Stores definitions
+//===----------------------------------------------------------------------===//
+
+// multiclass StPat<PatFrag StoreOp, RVInst Inst, RegisterClass StTy,
+//                  ValueType vt> {
+//   def : Pat<(StoreOp (vt StTy:$rs2), BaseAddr:$rs1),
+//             (Inst StTy:$rs2, BaseAddr:$rs1, 0)>;
+//   def : Pat<(StoreOp (vt StTy:$rs2), (add BaseAddr:$rs1, simm12:$imm12)),
+//             (Inst StTy:$rs2, BaseAddr:$rs1, simm12:$imm12)>;
+//   def : Pat<(StoreOp (vt StTy:$rs2), (IsOrAdd AddrFI:$rs1, simm12:$imm12)),
+//             (Inst StTy:$rs2, AddrFI:$rs1, simm12:$imm12)>;
+// }
+
+// defm : StPat<truncstorei8, SB, GPR, XLenVT>;
+// defm : StPat<truncstorei16, SH, GPR, XLenVT>;
+// defm : StPat<store, SW, GPR, i32>, Requires<[IsRV32]>;
+
+def ST       : SimInst<0x71, (outs), (ins GPR:$r1, GPR:$r2, GPR:$r3_imm),
+                       "ST\t$r1, $r2, $r3_imm",
+                       [(store (i32 GPR:$r1), (add ADDRrr:$r2, GPR:$r3_imm))]> {
   let hasSideEffects = 0;
   let mayLoad = 0;
   let mayStore = 1;
-  let Size = 4;
-
-  field bits<32> Inst;
-
-  // bits<8> Opcode = 0x70;
-  bits<4>  r1;
-  bits<4>  r2;
-  bits<16> r3_imm;
-
-  let Inst{31-24} = 0x71;
-  let Inst{23-20} = r1;
-  let Inst{19-16} = r2;
-  let Inst{15-0}  = r3_imm;
-
-  let OutOperandList = (outs GPR:$r1);
-  let InOperandList  = (ins GPR:$r2, GPR:$r3_imm);
-  let AsmString   = "ST\t$r1, $r2, $r3_imm";
-  let Pattern     = [(store GPR:$r1, (add ADDRrr:$r2, GPR:$r3_imm))];
-
-  let Itinerary = NoItinerary;
 }
-// [(store i32:$val, addr:$addr)]
-def STi : Instruction {
-  let Namespace = "SIM";
-  let DecoderNamespace = "SIM";
+
+def STi      : SimInst<0x73, (outs), (ins GPR:$r1, GPR:$r2, SIMM16:$r3_imm),
+                       "STi\t$r1, $r2, $r3_imm",
+                       [(store (i32 GPR:$r1), (IsOrAdd ADDRri:$r2, SIMM16:$r3_imm))]> {
   let hasSideEffects = 0;
-  let mayLoad = 1;
-  let mayStore = 0;
-  let Size = 4;
-
-  field bits<32> Inst;
-
-  // bits<8> Opcode = 0x70;
-  bits<4>  r1;
-  bits<4>  r2;
-  bits<16> r3_imm;
-
-  let Inst{31-24} = 0x73;
-  let Inst{23-20} = r1;
-  let Inst{19-16} = r2;
-  let Inst{15-0}  = r3_imm;
-
-  let OutOperandList = (outs GPR:$r1);
-  let InOperandList  = (ins GPR:$r2, SIMM16:$r3_imm);
-  let AsmString   = "STi\t$r1, $r2, $r3_imm";
-  let Pattern     = [(store GPR:$r1, (add ADDRri:$r2, SIMM16:$r3_imm))];
-
-  let Itinerary = NoItinerary;
+  let mayLoad = 0;
+  let mayStore = 1;
 }
 
-let hasSideEffects = 0, mayLoad = 0, mayStore = 1 in
-def STI_: SimInst<0x0, (outs), (ins GPR:$r1, GPR:$r2, SIMM16:$r3_imm),
-                  "STi\t$r1, ${r3_imm}(${r2})",
-                  []>;
-def : Pat<(store (i32 GPR:$r1), ADDRrr:$r2),
-          (STI_ GPR:$r1, ADDRrr:$r2, 0)>;
-
-// let hasSideEffects = 0, mayLoad = 1, mayStore = 0 in {
-// def LD       : SimInst<0x70,
-//                        (outs GPR:$r1), (ins GPR:$r2, SIMM16:$imm16),
-//                        "LD\t$r1, ${imm16}(${r2})",
-//                        [(i32 (load (add ADDRrr:$r2, SIMM16:$imm16)))]>;
-// def LDi      : SimInst<0x72,
-//                        (outs GPR:$r1), (ins GPR:$r2, SIMM16:$imm16),
-//                        "LDi\t$r1, ${imm16}(${r2})",
-//                        [(i32 (load (IsOrAdd ADDRri:$r2, SIMM16:$imm16)))]>;
+// def STI_: SimInst<0x71, (outs), (ins GPR:$r1, GPR:$r2, SIMM16:$r3_imm),
+//                   "STi\t$r1, ${r2}, ${r3_imm}",
+//                   []> {
+//   let hasSideEffects = 0;
+//   let mayLoad = 0;
+//   let mayStore = 1;
 // }
-// "LD\t$r1, $r2, $imm16)"
-// "LDi\t$r1, $r2, $imm16)"
-
-// let hasSideEffects = 0, mayLoad = 0, mayStore = 1 in {
-// def ST       : SimInst<0x71,
-//                        (outs), (ins GPR:$r1, GPR:$r2, SIMM16:$imm16),
-//                        "ST\t$r1, $r2, $imm16",
-//                        [(store (i32 GPR:$r1), (add ADDRrr:$r1, SIMM16:$imm16))]>;
-// def STi      : SimInst<0x73,
-//                        (outs), (ins GPR:$r1, GPR:$r2, SIMM16:$imm16),
-//                        "STi\t$r1, $r2, $imm16",
-//                        [(store (i32 GPR:$r1), (add ADDRri:$r1, SIMM16:$imm16))]>;
-// }
+def : Pat<(store (i32 GPR:$r1), ADDRri:$r2),
+          (STi GPR:$r1, ADDRri:$r2, 0)>;
 
 //===----------------------------------------------------------------------===//
 // Pseudo Instructions
@@ -416,9 +350,19 @@ def ADJCALLSTACKUP : SimPseudoInst<(outs), (ins i32imm:$amt1, i32imm:$amt2),
 
 // TODO: redefine RA from R0 to smth else?
 def PseudoRET : SimPseudoInst<(outs), (ins), "# PseudoRET",
-                [(SimRet)]>,
-                PseudoInstExpansion<(BR R0)> {
+                              [(SimRet)]>,
+                              PseudoInstExpansion<(BR R0)> {
   let isBarrier = 1;
   let isReturn = 1;
   let isTerminator = 1;
 }
+
+let isCall = 1, Defs = [R0] in
+def PseudoCALL : SimPseudoInst<(outs), (ins CTARGET16:$func), "# PseudoCALL",
+                               [(SimCall tglobaladdr:$func)]>,
+                               PseudoInstExpansion<(BL R0, CTARGET16:$func)>;
+
+// let isCall = 1, Defs = [R0] in
+// def PseudoCALLInd : SimPseudoInst<(outs), (ins GPR:$rs1), "# PseudoCALLInd",
+//                     [(SimCall GPR:$rs1)]>,
+//                     PseudoInstExpansion<(BLR R0, GPR:$rs1)>;

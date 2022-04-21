@@ -55,16 +55,26 @@ static SDValue convertValVTToLocVT(SelectionDAG &DAG, SDValue Val,
                                    const CCValAssign &VA, const SDLoc &DL) {
   EVT LocVT = VA.getLocVT();
 
-  if (VA.getValVT() == MVT::f32)
-    llvm_unreachable("");
+  if (VA.getValVT() == MVT::f32) {
+    llvm_unreachable("TBD");
+  }
 
+  // Promote the value if needed.
   switch (VA.getLocInfo()) {
   default:
-    llvm_unreachable("Unexpected CCValAssign::LocInfo");
+    llvm_unreachable("Unexpected LocInfo");
   case CCValAssign::Full:
     break;
+  case CCValAssign::SExt:
+    llvm_unreachable("TBD");
+    Val = DAG.getNode(ISD::SIGN_EXTEND, DL, LocVT, Val);
+    break;
+  case CCValAssign::ZExt:
+    llvm_unreachable("TBD");
+    Val = DAG.getNode(ISD::ZERO_EXTEND, DL, LocVT, Val);
+    break;
   case CCValAssign::BCvt:
-    llvm_unreachable("");
+    llvm_unreachable("TBD");
     Val = DAG.getNode(ISD::BITCAST, DL, LocVT, Val);
     break;
   }
@@ -77,6 +87,7 @@ SimTargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
                                const SmallVectorImpl<ISD::OutputArg> &Outs,
                                const SmallVectorImpl<SDValue> &OutVals,
                                const SDLoc &DL, SelectionDAG &DAG) const {
+  assert(IsVarArg == false && "TBD");
   MachineFunction &MF = DAG.getMachineFunction();
 
   // CCValAssign - represent the assignment of the return value to locations.
@@ -91,9 +102,6 @@ SimTargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
 
   SDValue Flag;
   SmallVector<SDValue, 4> RetOps(1, Chain);
-  // TODO: delete it
-  // Make room for the return address offset.
-  // RetOps.push_back(SDValue());
 
   // Copy the result values into the output registers.
   for (unsigned i = 0, end = RVLocs.size(); i < end; ++i) {
@@ -126,30 +134,27 @@ SimTargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
     // }
 
     // Guarantee that all emitted copies are stuck together with flags.
+    // TODO: this action is redundant for Simulation model - we don't need Glue
     Flag = Chain.getValue(1);
     RetOps.push_back(DAG.getRegister(VA.getLocReg(), VA.getLocVT()));
   }
 
-  unsigned RetAddrOffset = 8; // Call Inst + Delay Slot
   // If the function returns a struct, copy the SRetReturnReg to I0
   if (MF.getFunction().hasStructRetAttr()) {
-    llvm_unreachable("TBD: LowerReturn for hasStructRetAttr Function");
-    SimMachineFunctionInfo *SFI = MF.getInfo<SimMachineFunctionInfo>();
-    Register Reg = SFI->getSRetReturnReg();
-    if (!Reg) {
-      llvm_unreachable("sret virtual register not created in the entry block");
-    }
-    auto PtrVT = getPointerTy(DAG.getDataLayout());
-    SDValue Val = DAG.getCopyFromReg(Chain, DL, Reg, PtrVT);
-    Chain = DAG.getCopyToReg(Chain, DL, SIM::SP, Val, Flag);
-    Flag = Chain.getValue(1);
-    RetOps.push_back(DAG.getRegister(SIM::R14, PtrVT));
-    RetAddrOffset = 12; // CallInst + Delay Slot + Unimp
+    llvm_unreachable("TBD");
+    // SimMachineFunctionInfo *SFI = MF.getInfo<SimMachineFunctionInfo>();
+    // Register Reg = SFI->getSRetReturnReg();
+    // if (!Reg) {
+    //   llvm_unreachable("sret virtual register not created in the entry block");
+    // }
+    // auto PtrVT = getPointerTy(DAG.getDataLayout());
+    // SDValue Val = DAG.getCopyFromReg(Chain, DL, Reg, PtrVT);
+    // Chain = DAG.getCopyToReg(Chain, DL, SIM::SP, Val, Flag);
+    // Flag = Chain.getValue(1);
+    // RetOps.push_back(DAG.getRegister(SIM::R14, PtrVT));
   }
 
   RetOps[0] = Chain;  // Update chain.
-  // TODO: do u need RetAddr?
-  // RetOps[1] = DAG.getConstant(RetAddrOffset, DL, MVT::i32);
 
   // Add the flag if we have it.
   if (Flag.getNode()) {
