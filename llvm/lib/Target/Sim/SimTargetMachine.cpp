@@ -13,6 +13,7 @@
 
 #include "Sim.h"
 #include "SimTargetMachine.h"
+#include "TargetInfo/SimTargetInfo.h"
 #include "SimSubtarget.h"
 #include "SimTargetObjectFile.h"
 #include "TargetInfo/SimTargetInfo.h"
@@ -24,9 +25,10 @@
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Target/TargetOptions.h"
 #include "llvm/IR/LegacyPassManager.h"
+
 using namespace llvm;
 
-// #define DEBUG_TYPE "Sim"
+#define DEBUG_TYPE "Sim"
 
 static std::string computeDataLayout() {
   // little endian
@@ -60,8 +62,6 @@ static CodeModel::Model getEffectiveSimCodeModel() {
   return CodeModel::Small;
 }
 
-namespace llvm {
-
 SimTargetMachine::SimTargetMachine(
     const Target &T, const Triple &TT, StringRef CPU, StringRef FS,
     const TargetOptions &Options, Optional<Reloc::Model> RM,
@@ -74,7 +74,27 @@ SimTargetMachine::SimTargetMachine(
       Subtarget(TT, std::string(CPU), std::string(FS), *this) {
   initAsmInfo();
 }
-}   // llvm
+
+namespace {
+class SimPassConfig : public TargetPassConfig {
+public:
+  SimPassConfig(SimTargetMachine &TM, PassManagerBase &PM)
+      : TargetPassConfig(TM, PM) {}
+
+  SimTargetMachine &getSimTargetMachine() const {
+    return getTM<SimTargetMachine>();
+  }
+
+  bool addInstSelector() override {
+    addPass(createSimISelDag(getSimTargetMachine(), getOptLevel()));
+    return false;
+  }
+};
+}
+
+TargetPassConfig *SimTargetMachine::createPassConfig(PassManagerBase &PM) {
+  return new SimPassConfig(*this, PM);
+}
 
 extern "C" void LLVMInitializeSimTarget() {
   // Register the target.

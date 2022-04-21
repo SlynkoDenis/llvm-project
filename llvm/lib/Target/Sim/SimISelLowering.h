@@ -25,23 +25,9 @@ class SimTargetMachine;
 namespace SIMISD {
   enum NodeType : unsigned {
     FIRST_NUMBER = ISD::BUILTIN_OP_END,
-    CMPICC,      // Compare two GPR operands, set icc+xcc.
-    CMPFCC,      // Compare two FP operands, set fcc.
-    BRICC,       // Branch to dest on icc condition
-    BRXCC,       // Branch to dest on xcc condition (64-bit only).
-    BRFCC,       // Branch to dest on fcc condition
-    SELECT_ICC,  // Select between two values using the current ICC flags.
-    SELECT_XCC,  // Select between two values using the current XCC flags.
-    SELECT_FCC,  // Select between two values using the current FCC flags.
-    Hi, Lo,      // Hi/Lo operations, typically on a global address.
-    FTOI,        // FP to Int within a FP register.
-    ITOF,        // Int to FP within a FP register.
-    FTOX,        // FP to Int64 within a FP register.
-    XTOF,        // Int64 to FP within a FP register.
-    CALL,        // A call instruction.
-    RET,         // Return with a flag operand.
-    GLOBAL_BASE_REG, // Global base reg for PIC.
-    FLUSHW,      // FLUSH register windows to stack.
+    RET,
+    CALL,
+    BR_CC,
   };
 }
 
@@ -60,6 +46,12 @@ public:
     EVT getSetCCResultType(const DataLayout &DL, LLVMContext &Context,
                            EVT VT) const override;
 
+    /// Return true if the addressing mode represented by AM is legal for this
+    /// target, for a load/store of the specified type.
+    bool isLegalAddressingMode(const DataLayout &DL, const AddrMode &AM, Type *Ty,
+                               unsigned AS,
+                               Instruction *I = nullptr) const override;
+
     SDValue
     LowerFormalArguments(SDValue Chain, CallingConv::ID CallConv, bool isVarArg,
                          const SmallVectorImpl<ISD::InputArg> &Ins,
@@ -74,25 +66,22 @@ public:
                         const SmallVectorImpl<SDValue> &OutVals,
                         const SDLoc &dl, SelectionDAG &DAG) const override;
 
-    // SDValue withTargetFlags(SDValue Op, unsigned TF, SelectionDAG &DAG) const;
-    // SDValue makeHiLoPair(SDValue Op, unsigned HiTF, unsigned LoTF,
-    //                      SelectionDAG &DAG) const;
-    // SDValue makeAddress(SDValue Op, SelectionDAG &DAG) const;
-
-    // SDValue LowerF128Op(SDValue Op, SelectionDAG &DAG,
-    //                     const char *LibFuncName,
-    //                     unsigned numArgs) const;
-
-    // SDValue PerformBITCASTCombine(SDNode *N, DAGCombinerInfo &DCI) const;
-
-    // SDValue bitcastConstantFPToInt(ConstantFPSDNode *C, const SDLoc &DL,
-    //                                SelectionDAG &DAG) const;
+    bool CanLowerReturn(CallingConv::ID CallConv, MachineFunction &MF,
+                        bool IsVarArg,
+                        const SmallVectorImpl<ISD::OutputArg> &ArgsFlags,
+                        LLVMContext &Context) const override;
 
     SDValue PerformDAGCombine(SDNode *N, DAGCombinerInfo &DCI) const override;
 
+    bool mayBeEmittedAsTailCall(const CallInst *CI) const override {
+      return false;
+    }
+
     void ReplaceNodeResults(SDNode *N,
                             SmallVectorImpl<SDValue>& Results,
-                            SelectionDAG &DAG) const override;
+                            SelectionDAG &DAG) const override {
+      llvm_unreachable("TBD");
+    }
 };
 } // end namespace llvm
 

@@ -16,6 +16,7 @@
 #include "SimRegisterInfo.h"
 #include "SimTargetMachine.h"
 #include "SimTargetObjectFile.h"
+#include "MCTargetDesc/SimInfo.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/CodeGen/CallingConvLower.h"
@@ -30,26 +31,10 @@
 #include "llvm/IR/Module.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/KnownBits.h"
+
 using namespace llvm;
 
-
-
-//===----------------------------------------------------------------------===//
-// Calling Convention Implementation
-//===----------------------------------------------------------------------===//
-
-// static bool CC_Sim_Assign_SRet(unsigned &ValNo, MVT &ValVT,
-//                                  MVT &LocVT, CCValAssign::LocInfo &LocInfo,
-//                                  ISD::ArgFlagsTy &ArgFlags, CCState &State)
-// {
-//   assert (ArgFlags.isSRet());
-
-//   // Assign SRet argument.
-//   State.addLoc(CCValAssign::getCustomMem(ValNo, ValVT,
-//                                          0,
-//                                          LocVT, LocInfo));
-//   return true;
-// }
+#define DEBUG_TYPE "Sim-lower"
 
 #include "SimGenCallingConv.inc"
 #include "SimGenRegisterInfo.inc"
@@ -64,6 +49,26 @@ static unsigned toCallerWindow(unsigned Reg) {
   // if (Reg >= SIM::I0 && Reg <= SIM::I7)
   //   return Reg - SIM::I0 + SIM::O0;
   return Reg;
+}
+
+static SDValue convertValVTToLocVT(SelectionDAG &DAG, SDValue Val,
+                                   const CCValAssign &VA, const SDLoc &DL) {
+  EVT LocVT = VA.getLocVT();
+
+  if (VA.getValVT() == MVT::f32)
+    llvm_unreachable("");
+
+  switch (VA.getLocInfo()) {
+  default:
+    llvm_unreachable("Unexpected CCValAssign::LocInfo");
+  case CCValAssign::Full:
+    break;
+  case CCValAssign::BCvt:
+    llvm_unreachable("");
+    Val = DAG.getNode(ISD::BITCAST, DL, LocVT, Val);
+    break;
+  }
+  return Val;
 }
 
 SDValue
@@ -86,17 +91,16 @@ SimTargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
 
   SDValue Flag;
   SmallVector<SDValue, 4> RetOps(1, Chain);
+  // TODO: delete it
   // Make room for the return address offset.
-  RetOps.push_back(SDValue());
+  // RetOps.push_back(SDValue());
 
   // Copy the result values into the output registers.
-  for (unsigned i = 0, realRVLocIdx = 0;
-       i != RVLocs.size();
-       ++i, ++realRVLocIdx) {
+  for (unsigned i = 0, end = RVLocs.size(); i < end; ++i) {
     CCValAssign &VA = RVLocs[i];
     assert(VA.isRegLoc() && "Can only return in registers!");
 
-    SDValue Arg = OutVals[realRVLocIdx];
+    SDValue Arg = convertValVTToLocVT(DAG, OutVals[i], VA, DL);
 
     // TODO: delete it
     // if (VA.needsCustom()) {
@@ -129,7 +133,7 @@ SimTargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
   unsigned RetAddrOffset = 8; // Call Inst + Delay Slot
   // If the function returns a struct, copy the SRetReturnReg to I0
   if (MF.getFunction().hasStructRetAttr()) {
-    llvm_unreachable("TBD - LowerReturn");
+    llvm_unreachable("TBD: LowerReturn for hasStructRetAttr Function");
     SimMachineFunctionInfo *SFI = MF.getInfo<SimMachineFunctionInfo>();
     Register Reg = SFI->getSRetReturnReg();
     if (!Reg) {
@@ -145,7 +149,7 @@ SimTargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
 
   RetOps[0] = Chain;  // Update chain.
   // TODO: do u need RetAddr?
-  RetOps[1] = DAG.getConstant(RetAddrOffset, DL, MVT::i32);
+  // RetOps[1] = DAG.getConstant(RetAddrOffset, DL, MVT::i32);
 
   // Add the flag if we have it.
   if (Flag.getNode()) {
@@ -153,6 +157,20 @@ SimTargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
   }
 
   return DAG.getNode(SIMISD::RET, DL, MVT::Other, RetOps);
+}
+
+
+bool SimTargetLowering::CanLowerReturn(CallingConv::ID CallConv, MachineFunction &MF,
+                                       bool IsVarArg,
+                                       const SmallVectorImpl<ISD::OutputArg> &Outs,
+                                       LLVMContext &Context) const {
+  SmallVector<CCValAssign, 16> RVLocs;
+  CCState CCInfo(CallConv, IsVarArg, MF, RVLocs, Context);
+  if (!CCInfo.CheckReturn(Outs, RetCC_Sim))
+    return false;
+  if (CCInfo.getNextStackOffset() != 0 && IsVarArg)
+    llvm_unreachable("");
+  return true;
 }
 
 
@@ -216,9 +234,6 @@ SDValue SimTargetLowering::LowerFormalArguments(
     SDValue Load;
     if (VA.getValVT() == MVT::i32 || VA.getValVT() == MVT::f32) {
       Load = DAG.getLoad(VA.getValVT(), dl, Chain, FIPtr, MachinePointerInfo());
-    } else if (VA.getValVT() == MVT::f128) {
-      report_fatal_error("Sim does not handle f128 in calls; "
-                         "pass indirectly");
     } else {
       // We shouldn't see any other value types here.
       llvm_unreachable("Unexpected ValVT encountered in frame lowering.");
@@ -227,6 +242,7 @@ SDValue SimTargetLowering::LowerFormalArguments(
   }
 
   if (MF.getFunction().hasStructRetAttr()) {
+    llvm_unreachable("TBD: LowerFormalArguments for hasStructRetAttr Function");
     // Copy the SRet Argument to SRetReturnReg.
     SimMachineFunctionInfo *SFI = MF.getInfo<SimMachineFunctionInfo>();
     Register Reg = SFI->getSRetReturnReg();
@@ -240,7 +256,8 @@ SDValue SimTargetLowering::LowerFormalArguments(
 
   // Store remaining ArgRegs to the stack if this is a varargs function.
   if (isVarArg) {
-    // TODO: change regs
+    llvm_unreachable("TBD: LowerFormalArguments for isVarArg");
+    // TODO: change regs?
     static const MCPhysReg ArgRegs[] = {
       SIM::R10, SIM::R11, SIM::R12, SIM::R13, SIM::R14, SIM::R15
     };
@@ -592,20 +609,17 @@ Register SimTargetLowering::getRegisterByName(const char* RegName, LLT VT,
 SimTargetLowering::SimTargetLowering(const TargetMachine &TM,
                                      const SimSubtarget &STI)
     : TargetLowering(TM), Subtarget(&STI) {
-  // Instructions which use registers as conditionals examine all the
-  // bits (as does the pseudo SELECT_CC expansion). I don't think it
-  // matters much whether it's ZeroOrOneBooleanContent, or
-  // ZeroOrNegativeOneBooleanContent, so, arbitrarily choose the
-  // former.
-  // setBooleanContents(ZeroOrOneBooleanContent);
-  // setBooleanVectorContents(ZeroOrOneBooleanContent);
-
-  for (unsigned Opc = 0; Opc < ISD::BUILTIN_OP_END; ++Opc)
-    setOperationAction(Opc, MVT::i32, Expand);
 
   // Set up the register classes.
   addRegisterClass(MVT::i32, &SIM::GPRRegClass);
   addRegisterClass(MVT::f32, &SIM::GPRRegClass);
+
+  computeRegisterProperties(Subtarget->getRegisterInfo());
+
+  setStackPointerRegisterToSaveRestore(SIM::SP);
+
+  for (unsigned Opc = 0; Opc < ISD::BUILTIN_OP_END; ++Opc)
+    setOperationAction(Opc, MVT::i32, Expand);
 
   setOperationAction(ISD::ADD, MVT::i32, Legal);
   setOperationAction(ISD::MUL, MVT::i32, Legal);
@@ -613,40 +627,25 @@ SimTargetLowering::SimTargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::LOAD, MVT::i32, Legal);
   setOperationAction(ISD::STORE, MVT::i32, Legal);
 
+  setOperationAction(ISD::Constant, MVT::i32, Legal);
+  setOperationAction(ISD::UNDEF, MVT::i32, Legal);
+
   setOperationAction(ISD::BR_CC, MVT::i32, Custom);
 
-  setStackPointerRegisterToSaveRestore(SIM::SP);
-
+  setOperationAction(ISD::FRAMEADDR, MVT::i32, Legal);
   // setTargetDAGCombine(ISD::BITCAST);
 
   // setOperationAction(ISD::INTRINSIC_WO_CHAIN, MVT::Other, Custom);
 
   // setMinFunctionAlignment(Align(4));
-
-  // computeRegisterProperties(Subtarget->getRegisterInfo());
 }
 
 const char *SimTargetLowering::getTargetNodeName(unsigned Opcode) const {
   switch ((SIMISD::NodeType)Opcode) {
   case SIMISD::FIRST_NUMBER:    break;
-  case SIMISD::CMPICC:          return "SIMISD::CMPICC";
-  case SIMISD::CMPFCC:          return "SIMISD::CMPFCC";
-  case SIMISD::BRICC:           return "SIMISD::BRICC";
-  case SIMISD::BRXCC:           return "SIMISD::BRXCC";
-  case SIMISD::BRFCC:           return "SIMISD::BRFCC";
-  case SIMISD::SELECT_ICC:      return "SIMISD::SELECT_ICC";
-  case SIMISD::SELECT_XCC:      return "SIMISD::SELECT_XCC";
-  case SIMISD::SELECT_FCC:      return "SIMISD::SELECT_FCC";
-  case SIMISD::Hi:              return "SIMISD::Hi";
-  case SIMISD::Lo:              return "SIMISD::Lo";
-  case SIMISD::FTOI:            return "SIMISD::FTOI";
-  case SIMISD::ITOF:            return "SIMISD::ITOF";
-  case SIMISD::FTOX:            return "SIMISD::FTOX";
-  case SIMISD::XTOF:            return "SIMISD::XTOF";
-  case SIMISD::CALL:            return "SIMISD::CALL";
   case SIMISD::RET:             return "SIMISD::RET";
-  case SIMISD::GLOBAL_BASE_REG: return "SIMISD::GLOBAL_BASE_REG";
-  case SIMISD::FLUSHW:          return "SIMISD::FLUSHW";
+  case SIMISD::CALL:            return "SIMISD::CALL";
+  case SIMISD::BR_CC:           return "SIMISD::BR_CC";
   }
   return nullptr;
 }
@@ -658,6 +657,31 @@ EVT SimTargetLowering::getSetCCResultType(const DataLayout &, LLVMContext &,
   // if (!VT.isVector())
     // return MVT::i32;
   // return VT.changeVectorElementTypeToInteger();
+}
+
+bool SimTargetLowering::isLegalAddressingMode(const DataLayout &DL,
+                                              const AddrMode &AM, Type *Ty,
+                                              unsigned AS,
+                                              Instruction *I) const {
+  // No global is ever allowed as a base.
+  if (AM.BaseGV)
+    return false;
+
+  if (!isInt<16>(AM.BaseOffs))
+    return false;
+
+  switch (AM.Scale) {
+  case 0: // "r+i" or just "i", depending on HasBaseReg.
+    break;
+  case 1:
+    if (!AM.HasBaseReg) // allow "r+i".
+      break;
+    return false; // disallow "r+r" or "r+r+i".
+  default:
+    return false;
+  }
+
+  return true;
 }
 
 // Convert to a target node and set target flags.
@@ -913,7 +937,6 @@ EVT SimTargetLowering::getSetCCResultType(const DataLayout &, LLVMContext &,
 
 static SDValue LowerFRAMEADDR(SDValue Op, SelectionDAG &DAG,
                               const SimSubtarget *Subtarget) {
-
   const auto &RI = *Subtarget->getRegisterInfo();
   auto &MF = DAG.getMachineFunction();
   auto &MFI = MF.getFrameInfo();
@@ -1183,15 +1206,15 @@ static SDValue LowerFRAMEADDR(SDValue Op, SelectionDAG &DAG,
 //   }
 // }
 
-static SDValue LowerBR_CC(SDValue Op, SelectionDAG &DAG,
-                          const SimTargetLowering &TLI) {
+static SDValue LowerBR_CC(SDValue Op, SelectionDAG &DAG) {
   ISD::CondCode CC = cast<CondCodeSDNode>(Op.getOperand(1))->get();
   SDValue LHS = Op.getOperand(2);
   SDValue RHS = Op.getOperand(3);
   SDValue Dest = Op.getOperand(4);
   SDLoc dl(Op);
-  unsigned Opc = ~0U;
 
+  assert(LHS.getValueType() == MVT::i32);
+  // TODO: resolve this possible call
   // If this is a br_cc of a "setcc", and if the setcc got lowered into
   // an CMP[IF]CC/SELECT_[IF]CC pair, find the original compared values.
   // LookThroughSetCC(LHS, RHS, CC, SPCC);
@@ -1202,7 +1225,7 @@ static SDValue LowerBR_CC(SDValue Op, SelectionDAG &DAG,
   }
 
   SDValue TargetCC = DAG.getCondCode(CC);
-  return DAG.getNode(Opc, dl, Op.getValueType(), Op.getOperand(0),
+  return DAG.getNode(SIMISD::BR_CC, dl, Op.getValueType(), Op.getOperand(0),
                      LHS, RHS, TargetCC, Dest);
 }
 
@@ -1246,60 +1269,11 @@ LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   switch (Op.getOpcode()) {
   default: llvm_unreachable("Should not custom lower this!");
 
-  // case ISD::RETURNADDR:         return LowerRETURNADDR(Op, DAG, *this,
-  //                                                      Subtarget);
   case ISD::FRAMEADDR:          return LowerFRAMEADDR(Op, DAG,
                                                       Subtarget);
-  // case ISD::FP_TO_SINT:         return LowerFP_TO_SINT(Op, DAG, *this);
-  // case ISD::SINT_TO_FP:         return LowerSINT_TO_FP(Op, DAG, *this);
-  // case ISD::FP_TO_UINT:         return LowerFP_TO_UINT(Op, DAG, *this);
-  // case ISD::UINT_TO_FP:         return LowerUINT_TO_FP(Op, DAG, *this);
-  case ISD::BR_CC:              return LowerBR_CC(Op, DAG, *this);
-  // case ISD::SELECT_CC:          return LowerSELECT_CC(Op, DAG, *this);
-  // case ISD::VAARG:              return LowerVAARG(Op, DAG);
-  // case ISD::LOAD:               return LowerLOAD(Op, DAG);
-  // case ISD::STORE:              return LowerSTORE(Op, DAG);
-  // case ISD::FADD:               return LowerF128Op(Op, DAG,
-  //                                      getLibcallName(RTLIB::ADD_F128), 2);
-  // case ISD::FSUB:               return LowerF128Op(Op, DAG,
-  //                                      getLibcallName(RTLIB::SUB_F128), 2);
-  // case ISD::FMUL:               return LowerF128Op(Op, DAG,
-  //                                      getLibcallName(RTLIB::MUL_F128), 2);
-  // case ISD::FDIV:               return LowerF128Op(Op, DAG,
-  //                                      getLibcallName(RTLIB::DIV_F128), 2);
-  // case ISD::FSQRT:              return LowerF128Op(Op, DAG,
-  //                                      getLibcallName(RTLIB::SQRT_F128),1);
-  // case ISD::FABS:
-  // case ISD::FNEG:               return LowerFNEGorFABS(Op, DAG, false);
-  // case ISD::ADDC:
-  // case ISD::ADDE:
-  // case ISD::SUBC:
-  // case ISD::SUBE:               return LowerADDC_ADDE_SUBC_SUBE(Op, DAG);
+  case ISD::BR_CC:              return LowerBR_CC(Op, DAG);
   }
 }
-
-// SDValue SimTargetLowering::bitcastConstantFPToInt(ConstantFPSDNode *C,
-//                                                     const SDLoc &DL,
-//                                                     SelectionDAG &DAG) const {
-//   APInt V = C->getValueAPF().bitcastToAPInt();
-//   SDValue Lo = DAG.getConstant(V.zextOrTrunc(32), DL, MVT::i32);
-//   SDValue Hi = DAG.getConstant(V.lshr(32).zextOrTrunc(32), DL, MVT::i32);
-//   if (DAG.getDataLayout().isLittleEndian())
-//     std::swap(Lo, Hi);
-//   return DAG.getBuildVector(MVT::v2i32, DL, {Hi, Lo});
-// }
-
-// SDValue SimTargetLowering::PerformBITCASTCombine(SDNode *N,
-//                                                    DAGCombinerInfo &DCI) const {
-//   SDLoc dl(N);
-//   SDValue Src = N->getOperand(0);
-
-//   if (isa<ConstantFPSDNode>(Src) && N->getSimpleValueType(0) == MVT::v2i32 &&
-//       Src.getSimpleValueType() == MVT::f64)
-//     return bitcastConstantFPToInt(cast<ConstantFPSDNode>(Src), dl, DCI.DAG);
-
-//   return SDValue();
-// }
 
 SDValue SimTargetLowering::PerformDAGCombine(SDNode *N,
                                                DAGCombinerInfo &DCI) const {
@@ -1311,135 +1285,4 @@ SDValue SimTargetLowering::PerformDAGCombine(SDNode *N,
   //   return PerformBITCASTCombine(N, DCI);
   // }
   return SDValue();
-}
-
-//===----------------------------------------------------------------------===//
-//                         Sim Inline Assembly Support
-//===----------------------------------------------------------------------===//
-
-/// getConstraintType - Given a constraint letter, return the type of
-/// constraint it is for this target.
-// SimTargetLowering::ConstraintType
-// SimTargetLowering::getConstraintType(StringRef Constraint) const {
-//   if (Constraint.size() == 1) {
-//     switch (Constraint[0]) {
-//     default:  break;
-//     case 'r':
-//     case 'f':
-//     case 'e':
-//       return C_RegisterClass;
-//     case 'I': // SIMM13
-//       return C_Immediate;
-//     }
-//   }
-
-//   return TargetLowering::getConstraintType(Constraint);
-// }
-
-/// LowerAsmOperandForConstraint - Lower the specified operand into the Ops
-/// vector.  If it is invalid, don't add anything to Ops.
-// void SimTargetLowering::
-// LowerAsmOperandForConstraint(SDValue Op,
-//                              std::string &Constraint,
-//                              std::vector<SDValue> &Ops,
-//                              SelectionDAG &DAG) const {
-//   SDValue Result(nullptr, 0);
-
-//   // Only support length 1 constraints for now.
-//   if (Constraint.length() > 1)
-//     return;
-
-//   char ConstraintLetter = Constraint[0];
-//   switch (ConstraintLetter) {
-//   default: break;
-//   case 'I':
-//     if (ConstantSDNode *C = dyn_cast<ConstantSDNode>(Op)) {
-//       if (isInt<13>(C->getSExtValue())) {
-//         Result = DAG.getTargetConstant(C->getSExtValue(), SDLoc(Op),
-//                                        Op.getValueType());
-//         break;
-//       }
-//       return;
-//     }
-//   }
-
-//   if (Result.getNode()) {
-//     Ops.push_back(Result);
-//     return;
-//   }
-//   TargetLowering::LowerAsmOperandForConstraint(Op, Constraint, Ops, DAG);
-// }
-
-void SimTargetLowering::ReplaceNodeResults(SDNode *N,
-                                             SmallVectorImpl<SDValue>& Results,
-                                             SelectionDAG &DAG) const {
-  llvm_unreachable("TBD");
-  // SDLoc dl(N);
-
-  // RTLIB::Libcall libCall = RTLIB::UNKNOWN_LIBCALL;
-
-  // switch (N->getOpcode()) {
-  // default:
-  //   llvm_unreachable("Do not know how to custom type legalize this operation!");
-
-  // case ISD::FP_TO_SINT:
-  // case ISD::FP_TO_UINT:
-  //   // Custom lower only if it involves f128 or i64.
-  //   if (N->getOperand(0).getValueType() != MVT::f128
-  //       || N->getValueType(0) != MVT::i64)
-  //     return;
-  //   libCall = ((N->getOpcode() == ISD::FP_TO_SINT)
-  //              ? RTLIB::FPTOSINT_F128_I64
-  //              : RTLIB::FPTOUINT_F128_I64);
-
-  //   Results.push_back(LowerF128Op(SDValue(N, 0),
-  //                                 DAG,
-  //                                 getLibcallName(libCall),
-  //                                 1));
-  //   return;
-  // case ISD::READCYCLECOUNTER: {
-  //   SDValue Lo = DAG.getCopyFromReg(N->getOperand(0), dl, SIM::ASR23, MVT::i32);
-  //   SDValue Hi = DAG.getCopyFromReg(Lo, dl, SIM::G0, MVT::i32);
-  //   SDValue Ops[] = { Lo, Hi };
-  //   SDValue Pair = DAG.getNode(ISD::BUILD_PAIR, dl, MVT::i64, Ops);
-  //   Results.push_back(Pair);
-  //   Results.push_back(N->getOperand(0));
-  //   return;
-  // }
-  // case ISD::SINT_TO_FP:
-  // case ISD::UINT_TO_FP:
-  //   // Custom lower only if it involves f128 or i64.
-  //   if (N->getValueType(0) != MVT::f128
-  //       || N->getOperand(0).getValueType() != MVT::i64)
-  //     return;
-
-  //   libCall = ((N->getOpcode() == ISD::SINT_TO_FP)
-  //              ? RTLIB::SINTTOFP_I64_F128
-  //              : RTLIB::UINTTOFP_I64_F128);
-
-  //   Results.push_back(LowerF128Op(SDValue(N, 0),
-  //                                 DAG,
-  //                                 getLibcallName(libCall),
-  //                                 1));
-  //   return;
-  // case ISD::LOAD: {
-  //   LoadSDNode *Ld = cast<LoadSDNode>(N);
-  //   // Custom handling only for i64: turn i64 load into a v2i32 load,
-  //   // and a bitcast.
-  //   if (Ld->getValueType(0) != MVT::i64 || Ld->getMemoryVT() != MVT::i64)
-  //     return;
-
-  //   SDLoc dl(N);
-  //   SDValue LoadRes = DAG.getExtLoad(
-  //       Ld->getExtensionType(), dl, MVT::v2i32, Ld->getChain(),
-  //       Ld->getBasePtr(), Ld->getPointerInfo(), MVT::v2i32,
-  //       Ld->getOriginalAlign(), Ld->getMemOperand()->getFlags(),
-  //       Ld->getAAInfo());
-
-  //   SDValue Res = DAG.getNode(ISD::BITCAST, dl, MVT::i64, LoadRes);
-  //   Results.push_back(Res);
-  //   Results.push_back(LoadRes.getValue(1));
-  //   return;
-  // }
-  // }
 }

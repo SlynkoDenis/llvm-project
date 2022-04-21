@@ -41,16 +41,16 @@ public:
   SimDAGToDAGISel(SimTargetMachine &tm,
                   CodeGenOpt::Level OptLevel) : SelectionDAGISel(tm, OptLevel) {}
 
-  // bool runOnMachineFunction(MachineFunction &MF) override {
-  //   Subtarget = &MF.getSubtarget<SimSubtarget>();
-  //   return SelectionDAGISel::runOnMachineFunction(MF);
-  // }
+  bool runOnMachineFunction(MachineFunction &MF) override {
+    Subtarget = &MF.getSubtarget<SimSubtarget>();
+    return SelectionDAGISel::runOnMachineFunction(MF);
+  }
 
   void Select(SDNode *N) override;
 
   // Complex Pattern Selectors.
-  // bool SelectADDRrr(SDValue N, SDValue &R1, SDValue &R2);
-  // bool SelectADDRri(SDValue N, SDValue &Base, SDValue &Offset);
+  bool SelectADDRrr(SDValue N, SDValue &R);
+  bool SelectADDRri(SDValue N, SDValue &Base);
 
   StringRef getPassName() const override {
     return "Sim DAG->DAG Pattern Instruction Selection";
@@ -61,75 +61,29 @@ public:
 };
 }  // end anonymous namespace
 
-// bool SimDAGToDAGISel::SelectADDRri(SDValue Addr,
-//                                      SDValue &Base, SDValue &Offset) {
-//   if (FrameIndexSDNode *FIN = dyn_cast<FrameIndexSDNode>(Addr)) {
-//     Base = CurDAG->getTargetFrameIndex(
-//         FIN->getIndex(), TLI->getPointerTy(CurDAG->getDataLayout()));
-//     Offset = CurDAG->getTargetConstant(0, SDLoc(Addr), MVT::i32);
-//     return true;
-//   }
+bool SimDAGToDAGISel::SelectADDRri(SDValue Addr,
+                                   SDValue &Base) {
+  if (FrameIndexSDNode *FIN = dyn_cast<FrameIndexSDNode>(Addr)) {
+    Base = CurDAG->getTargetFrameIndex(FIN->getIndex(), MVT::i32);
+    return true;
+  }
+  return false;
+}
 
-//   if (Addr.getOpcode() == ISD::ADD) {
-//     if (ConstantSDNode *CN = dyn_cast<ConstantSDNode>(Addr.getOperand(1))) {
-//       if (isInt<13>(CN->getSExtValue())) {
-//         if (FrameIndexSDNode *FIN =
-//                 dyn_cast<FrameIndexSDNode>(Addr.getOperand(0))) {
-//           // Constant offset from frame ref.
-//           Base = CurDAG->getTargetFrameIndex(
-//               FIN->getIndex(), TLI->getPointerTy(CurDAG->getDataLayout()));
-//         } else {
-//           Base = Addr.getOperand(0);
-//         }
-//         Offset = CurDAG->getTargetConstant(CN->getZExtValue(), SDLoc(Addr),
-//                                            MVT::i32);
-//         return true;
-//       }
-//     }
-//     if (Addr.getOperand(0).getOpcode() == SPISD::Lo) {
-//       Base = Addr.getOperand(1);
-//       Offset = Addr.getOperand(0).getOperand(0);
-//       return true;
-//     }
-//     if (Addr.getOperand(1).getOpcode() == SPISD::Lo) {
-//       Base = Addr.getOperand(0);
-//       Offset = Addr.getOperand(1).getOperand(0);
-//       return true;
-//     }
-//   }
-//   Base = Addr;
-//   Offset = CurDAG->getTargetConstant(0, SDLoc(Addr), MVT::i32);
-//   return true;
-// }
-
-// bool SimDAGToDAGISel::SelectADDRrr(SDValue Addr, SDValue &R1, SDValue &R2) {
-//   if (Addr.getOpcode() == ISD::FrameIndex) return false;
-//   if (Addr.getOpcode() == ISD::TargetExternalSymbol ||
-//       Addr.getOpcode() == ISD::TargetGlobalAddress ||
-//       Addr.getOpcode() == ISD::TargetGlobalTLSAddress)
-//     return false;  // direct calls.
-
-//   if (Addr.getOpcode() == ISD::ADD) {
-//     if (ConstantSDNode *CN = dyn_cast<ConstantSDNode>(Addr.getOperand(1)))
-//       if (isInt<13>(CN->getSExtValue()))
-//         return false;  // Let the reg+imm pattern catch this!
-//     if (Addr.getOperand(0).getOpcode() == SPISD::Lo ||
-//         Addr.getOperand(1).getOpcode() == SPISD::Lo)
-//       return false;  // Let the reg+imm pattern catch this!
-//     R1 = Addr.getOperand(0);
-//     R2 = Addr.getOperand(1);
-//     return true;
-//   }
-
-//   R1 = Addr;
-//   R2 = CurDAG->getRegister(SIM::G0, TLI->getPointerTy(CurDAG->getDataLayout()));
-//   return true;
-// }
+bool SimDAGToDAGISel::SelectADDRrr(SDValue Addr, SDValue &R) {
+  if (FrameIndexSDNode *FIN = dyn_cast<FrameIndexSDNode>(Addr)) {
+    R = CurDAG->getTargetFrameIndex(FIN->getIndex(), MVT::i32);
+  } else {
+    R = Addr;
+  }
+  return true;
+}
 
 void SimDAGToDAGISel::Select(SDNode *N) {
     // TODO: implement custom handling
   SDLoc dl(N);
   if (N->isMachineOpcode()) {
+    LLVM_DEBUG(dbgs() << "== "; N->dump(CurDAG); dbgs() << "\n");
     N->setNodeId(-1);
     return;   // Already selected.
   }

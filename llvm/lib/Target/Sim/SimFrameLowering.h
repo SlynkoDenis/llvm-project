@@ -52,10 +52,11 @@ public:
 private:
 
   // Emits code for adjusting SP in function prologue/epilogue.
-  void emitSPAdjustment(MachineFunction &MF,
-                        MachineBasicBlock &MBB,
-                        MachineBasicBlock::iterator MBBI,
-                        int NumBytes) const;
+  void emitRegAdjustment(MachineBasicBlock &MBB,
+                         MachineBasicBlock::iterator MBBI,
+                         int NumBytes,
+                         MachineInstr::MIFlag Flag,
+                         Register Src, Register Dest) const;
 
   const SimSubtarget &ST;
 };

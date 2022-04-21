@@ -34,9 +34,9 @@ def SimAsmParser : AsmParser {
   bit ShouldEmitMatchRegisterName = 0;
 }
 // TODO: decide if SimAsmParserVariant is required
-def SimAsmParserVariant : AsmParserVariant {
-  let RegisterPrefix = "%";
-}
+// def SimAsmParserVariant : AsmParserVariant {
+//   let RegisterPrefix = "%";
+// }
 
 def : Processor<"Sim", NoItineraries, []>;
 
@@ -56,8 +56,8 @@ def SimAsmWriter : AsmWriter {
 // const char *SimInstPrinter::getRegisterName(unsigned RegNo) {...}
 def Sim : Target {
   let InstructionSet = SimInstrInfo;
-  let AssemblyParsers  = [SimAsmParser];
-  let AssemblyParserVariants  = [SimAsmParserVariant];
-  let AssemblyWriters = [SimAsmWriter];
+  // let AssemblyParsers  = [SimAsmParser];
+  // let AssemblyParserVariants  = [SimAsmParserVariant];
+  // let AssemblyWriters = [SimAsmWriter];
   let AllowRegisterRenaming = 1;
 }

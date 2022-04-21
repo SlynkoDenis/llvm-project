@@ -28,8 +28,8 @@ enum OperandType : unsigned {
   OPERAND_SIMM16 = MCOI::OPERAND_FIRST_TARGET,
   OPERAND_UIMM16,
 };
-} // namespace USimOp
+} // namespace SimOp
 
 } // end namespace llvm
 
-#endif
+#endif  // LLVM_LIB_TARGET_SIM_MCTARGETDESC_SIMINFO_H

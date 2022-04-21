@@ -22,7 +22,7 @@
 
 // Generic Sim Format
 class SimInst<bits<8> op, dag outs, dag ins, string asmstr,
-              list<dag> pattern, InstrItinClass itin = NoItinerary> : Instruction {
+              list<dag> pattern> : Instruction {
   // Inst and Size: for tablegen(... -gen-emitter) and
   // tablegen(... -gen-disassembler) in CMakeLists.txt
   let Namespace = "SIM";
@@ -46,33 +46,35 @@ class SimInst<bits<8> op, dag outs, dag ins, string asmstr,
   let AsmString   = asmstr;
   let Pattern     = pattern;
 
-  let Itinerary = itin;
+  let Itinerary = NoItinerary;
 }
 
-class ALU_ri<bits<8> opcode, string asmstr> : SimInst<opcode, (outs GPR:$r1), (ins GPR:$r2, GPR:$imm16),
-                                                      asmstr # "\t" # "$r1, $r2, $imm16", []>;
+class ALU_ri<bits<8> opcode, string asmstr,
+             list<dag> pattern> : SimInst<opcode, (outs GPR:$r1), (ins GPR:$r2, GPR:$imm16),
+                                          asmstr # "\t" # "$r1, $r2, $imm16", pattern>;
 
 
 class SimInstRegister<bits<8> opcode, dag outs,
-                       dag ins, string asmstr> : SimInst<opcode, outs, ins, asmstr, []> {
+                      dag ins, string asmstr, list<dag> pattern> : SimInst<opcode, outs, ins, asmstr, pattern> {
   bits<4> r3;
 
   let Inst{15-12} = r3;
   let Inst{11-0}  = 0;
 }
 
-class ALU_rr<bits<8> opcode, string asmstr> : SimInstRegister<opcode, (outs GPR:$r1), (ins GPR:$r2, GPR:$r3),
-                                                              asmstr # "\t" # "$r1, $r2, $r3">;
+class ALU_rr<bits<8> opcode, string asmstr,
+             list<dag> pattern> : SimInstRegister<opcode, (outs GPR:$r1), (ins GPR:$r2, GPR:$r3),
+                                                  asmstr # "\t" # "$r1, $r2, $r3", pattern>;
 
 
 class SimInstBranch<bits<8> opcode, dag outs,
-                     dag ins, string asmstr> : SimInst<opcode, outs, ins, asmstr, []>;
+                    dag ins, string asmstr,
+                    list<dag> pattern> : SimInst<opcode, outs, ins, asmstr, pattern>;
+
 
 class BCOND<bits<8> opcode, string asmstr> : SimInstBranch<opcode, (outs), (ins GPR:$r1, GPR:$r2, GPR:$imm16),
-                                                           asmstr # "\t" # "$r1, $r2, $imm16">;
+                                                           asmstr # "\t" # "$r1, $r2, $imm16", []>;
 
-class STORE<bits<8> opcode, string asmstr> : SimInstRegister<opcode, (outs), (ins GPR:$r1, GPR:$r2, GPR:$r3),
-                                                             asmstr # "\t" # "$r1, $r2, $r3">;
 
 // Pseudo instructions format
 class SimPseudoInst<dag outs, dag ins, string asmstr, list<dag> pattern>

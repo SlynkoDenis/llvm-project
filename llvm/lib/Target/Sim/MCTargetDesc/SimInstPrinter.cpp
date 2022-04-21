@@ -42,29 +42,42 @@ void SimInstPrinter::printRegName(raw_ostream &OS, unsigned RegNo) const
 void SimInstPrinter::printInst(const MCInst *MI, uint64_t Address,
                                StringRef Annot, const MCSubtargetInfo &STI,
                                raw_ostream &O) {
-  if (!printAliasInstr(MI, Address, STI, O)) {
-    printInstruction(MI, Address, STI, O);
+  if (!printAliasInstr(MI, Address, O)) {
+    printInstruction(MI, Address, O);
   }
   printAnnotation(O, Annot);
 }
 
-void SimInstPrinter::printOperand(const MCInst *MI, int opNum,
-                                    const MCSubtargetInfo &STI,
-                                    raw_ostream &O) {
+void SimInstPrinter::printOperand(const MCInst *MI, uint64_t opNum, raw_ostream &OS) {
   const MCOperand &MO = MI->getOperand(opNum);
 
   if (MO.isReg()) {
-    printRegName(O, MO.getReg());
+    printRegName(OS, MO.getReg());
     return;
   }
 
   if (MO.isImm()) {
-    O << MO.getImm();
+    OS << MO.getImm();
     return;
   }
 
   assert(MO.isExpr() && "Unknown operand kind in printOperand");
-  MO.getExpr()->print(O, &MAI);
+  MO.getExpr()->print(OS, &MAI);
+}
+
+void SimInstPrinter::printBranchOperand(const MCInst *MI, uint64_t Address,
+                                        unsigned OpNum, raw_ostream &OS) {
+  const MCOperand &MO = MI->getOperand(OpNum);
+  if (!MO.isImm()) {
+    return printOperand(MI, OpNum, OS);
+  }
+
+  if (PrintBranchImmAsAddress) {
+    uint32_t Target = Address + MO.getImm();
+    OS << formatHex(static_cast<uint64_t>(Target));
+  } else {
+    OS << MO.getImm();
+  }
 }
 
 // void SimInstPrinter::printMemOperand(const MCInst *MI, int opNum,

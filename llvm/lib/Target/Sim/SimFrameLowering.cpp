@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "Sim.h"
 #include "SimFrameLowering.h"
 #include "SimInstrInfo.h"
 #include "SimMachineFunctionInfo.h"
@@ -36,18 +37,19 @@ SimFrameLowering::SimFrameLowering(const SimSubtarget &ST)
     : TargetFrameLowering(TargetFrameLowering::StackGrowsDown, Align(4), 0, Align(4)),
       ST(ST) {}
 
-void SimFrameLowering::emitSPAdjustment(MachineFunction &MF,
-                                        MachineBasicBlock &MBB,
-                                        MachineBasicBlock::iterator MBBI,
-                                        int NumBytes) const {
+void SimFrameLowering::emitRegAdjustment(MachineBasicBlock &MBB,
+                                         MachineBasicBlock::iterator MBBI,
+                                         int NumBytes,
+                                         MachineInstr::MIFlag Flag,
+                                         Register Src, Register Dest) const {
 
     DebugLoc dl;
     const SimInstrInfo &TII =
       *static_cast<const SimInstrInfo *>(ST.getInstrInfo());
 
-    assert(NumBytes >= -65536 && NumBytes < 65536 && "Invalid SPAdjistment NumBytes argument value");
-    BuildMI(MBB, MBBI, dl, TII.get(SIM::ADDi), SIM::SP)
-      .addReg(SIM::SP).addImm(NumBytes);
+    assert(isInt<16>(NumBytes) && "Invalid SPAdjistment NumBytes argument value");
+    BuildMI(MBB, MBBI, dl, TII.get(SIM::ADDi), Dest)
+      .addReg(Src).addImm(NumBytes).setMIFlag(Flag);
     return;
 }
 
@@ -63,9 +65,6 @@ void SimFrameLowering::emitPrologue(MachineFunction &MF,
         *static_cast<const SimRegisterInfo *>(ST.getRegisterInfo());
     MachineBasicBlock::iterator MBBI = MBB.begin();
   
-    // Register FPReg = SIM::FP;
-    // Register SPReg = SIM::SP;
-  
     // Debug location must be unknown since the first debug location is used
     // to determine the end of the prologue.
     DebugLoc dl;
@@ -77,28 +76,9 @@ void SimFrameLowering::emitPrologue(MachineFunction &MF,
     }
 
     // Get the number of bytes to allocate from the FrameInfo
-    auto NumBytes = static_cast<int>(MFI.getStackSize());
-
+    auto NumBytes = alignTo(MFI.getStackSize(), getStackAlign());
     if (NumBytes == 0 && !MFI.adjustsStack()) {
       return;
-    }
-
-    // unsigned SAVEri = SIM::SAVEri;
-    // unsigned SAVErr = SIM::SAVErr;
-    // TODO: resolve
-    // if (FuncInfo->isLeafProc()) {
-    //     if (NumBytes == 0) {
-    //         return;
-    //     }
-    //     SAVEri = SIM::ADDi;
-    //     SAVErr = SIM::ADD;
-    // }
-
-    // Add the extra call frame stack size, if needed. (This is the same
-    // code as in PrologEpilogInserter, but also gets disabled by
-    // targetHandlesStackFrameRounding)
-    if (MFI.adjustsStack() && hasReservedCallFrame(MF)) {
-        NumBytes += MFI.getMaxCallFrameSize();
     }
 
     // Adds the Sim subtarget-specific spill area to the stack
@@ -112,7 +92,20 @@ void SimFrameLowering::emitPrologue(MachineFunction &MF,
     // Update stack size with corrected value.
     MFI.setStackSize(NumBytes);
 
-    emitSPAdjustment(MF, MBB, MBBI, -NumBytes);
+    emitRegAdjustment(MBB, MBBI, -NumBytes,
+                      MachineInstr::FrameSetup,
+                      SIM::SP, SIM::SP);
+
+    if (!hasFP(MF)) {
+      return;
+    }
+    
+    const auto &CSI = MFI.getCalleeSavedInfo();
+    std::advance(MBBI, CSI.size());
+
+    emitRegAdjustment(MBB, MBBI, NumBytes,
+                      MachineInstr::FrameSetup,
+                      SIM::SP, SIM::FP);
 }
 
 MachineBasicBlock::iterator SimFrameLowering::
@@ -126,7 +119,7 @@ eliminateCallFramePseudoInstr(MachineFunction &MF, MachineBasicBlock &MBB,
     }
 
     if (Size) {
-      emitSPAdjustment(MF, MBB, I, Size);
+      emitRegAdjustment(MBB, I, Size, MachineInstr::NoFlags, SIM::SP, SIM::SP);
     }
   }
   return MBB.erase(I);
@@ -134,21 +127,27 @@ eliminateCallFramePseudoInstr(MachineFunction &MF, MachineBasicBlock &MBB,
 
 void SimFrameLowering::emitEpilogue(MachineFunction &MF,
                                     MachineBasicBlock &MBB) const {
+    const SimRegisterInfo *RI = ST.getRegisterInfo();
     MachineBasicBlock::iterator MBBI = MBB.getLastNonDebugInstr();
     DebugLoc dl = MBBI->getDebugLoc();
-    assert(MBBI->getOpcode() == SIM::RET &&
-           "Can only put epilog before 'ret' instruction!");
-
+    // auto *FI = MF.getInfo<SimMachineFunctionInfo>();
+    // assert(FI->getVarArgsSaveSize() == 0 && "getVarArgsSaveSize must be zero!");
+    // assert(MBBI->getOpcode() == SIM::RET &&
+    //        "Can only put epilog before 'ret' instruction!");
     MachineFrameInfo &MFI = MF.getFrameInfo();
 
-    int NumBytes = static_cast<int>(MFI.getStackSize());
-    if (NumBytes == 0) {
+    auto NumBytes = alignTo(MFI.getStackSize(), getStackAlign());
+    if (NumBytes == 0 && !MFI.adjustsStack()) {
       return;
     }
 
-    emitSPAdjustment(MF, MBB, MBBI, NumBytes);
+    assert(hasFP(MF) && "must have FP!");
+    assert(!(MFI.hasVarSizedObjects() && RI->hasStackRealignment(MF)) && "TBD");
+
+    emitRegAdjustment(MBB, MBBI, NumBytes, MachineInstr::FrameDestroy, SIM::SP, SIM::SP);
 }
 
+// TODO: delete this function and usage
 bool SimFrameLowering::hasReservedCallFrame(const MachineFunction &MF) const {
     // Reserve call frame if there are no variable sized objects on the stack.
     return !MF.getFrameInfo().hasVarSizedObjects();
@@ -211,62 +210,6 @@ SimFrameLowering::getFrameIndexReference(const MachineFunction &MF, int FI,
   }
 }
 
-// TODO: resolve
-// bool SimFrameLowering::isLeafProc(MachineFunction &MF) const
-// {
-
-//   MachineRegisterInfo &MRI = MF.getRegInfo();
-//   MachineFrameInfo    &MFI = MF.getFrameInfo();
-
-//   return !(MFI.hasCalls()                  // has calls
-//            // || MRI.isPhysRegUsed(SIM::L0)    // Too many registers needed
-//            || MRI.isPhysRegUsed(SIM::SP)    // %sp is used
-//            || hasFP(MF));                  // need %fp
-// }
-
-// TODO: resolve
-// void SimFrameLowering::remapRegsForLeafProc(MachineFunction &MF) const {
-//   MachineRegisterInfo &MRI = MF.getRegInfo();
-//   // Remap %i[0-7] to %o[0-7].
-//   for (unsigned reg = SIM::I0; reg <= SIM::I7; ++reg) {
-//     if (!MRI.isPhysRegUsed(reg))
-//       continue;
-
-//     unsigned mapped_reg = reg - SIM::I0 + SIM::O0;
-
-//     // Replace I register with O register.
-//     MRI.replaceRegWith(reg, mapped_reg);
-
-//     // Also replace register pair super-registers.
-//     if ((reg - SIM::I0) % 2 == 0) {
-//       unsigned preg = (reg - SIM::I0) / 2 + SIM::I0_I1;
-//       unsigned mapped_preg = preg - SIM::I0_I1 + SIM::O0_O1;
-//       MRI.replaceRegWith(preg, mapped_preg);
-//     }
-//   }
-
-//   // Rewrite MBB's Live-ins.
-//   for (MachineBasicBlock &MBB : MF) {
-//     for (unsigned reg = SIM::I0_I1; reg <= SIM::I6_I7; ++reg) {
-//       if (!MBB.isLiveIn(reg))
-//         continue;
-//       MBB.removeLiveIn(reg);
-//       MBB.addLiveIn(reg - SIM::I0_I1 + SIM::O0_O1);
-//     }
-//     for (unsigned reg = SIM::I0; reg <= SIM::I7; ++reg) {
-//       if (!MBB.isLiveIn(reg))
-//         continue;
-//       MBB.removeLiveIn(reg);
-//       MBB.addLiveIn(reg - SIM::I0 + SIM::O0);
-//     }
-//   }
-
-//     assert(verifyLeafProcRegUse(&MRI));
-// #ifdef EXPENSIVE_CHECKS
-//     MF.verify(0, "After LeafProc Remapping");
-// #endif
-// }
-
 void SimFrameLowering::determineCalleeSaves(MachineFunction &MF,
                                               BitVector &SavedRegs,
                                               RegScavenger *RS) const {
@@ -275,11 +218,4 @@ void SimFrameLowering::determineCalleeSaves(MachineFunction &MF,
       SavedRegs.set(SIM::SP);
       // SavedRegs.set(SIM::FP);
     }
-    // TODO: resolve
-    // if (!DisableLeafProc && isLeafProc(MF)) {
-    //     SimMachineFunctionInfo *MFI = MF.getInfo<SimMachineFunctionInfo>();
-    //     MFI->setLeafProc(true);
-
-    //     remapRegsForLeafProc(MF);
-    // }
 }

@@ -11,6 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "SimInfo.h"
 #include "SimMCTargetDesc.h"
 #include "SimInstPrinter.h"
 #include "SimMCAsmInfo.h"

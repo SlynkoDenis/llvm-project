@@ -11,22 +11,27 @@
 //===----------------------------------------------------------------------===//
 
 def CC_Sim : CallingConv<[
-  // Custom assign SRet to [sp+64].
-  // TODO: decide one of the options
-  // CCIfSRet<CCCustom<"CC_Sparc_Assign_SRet">>,
-  // TODO: choose reg
-  CCIfSRet<CCIfType<[i32], CCAssignToReg<[R14]>>>,
+  CCIfType<[i8, i16], CCPromoteToType<i32>>,
+  // TODO: choose reg and decide if it's needed here
+  // CCIfSRet<CCIfType<[i32], CCAssignToReg<[R14]>>>,
   // i32 f32 arguments get passed in integer registers if there is space.
-  CCIfType<[i32, f32], CCAssignToReg<[R10, R11, R12, R13, R14, R15]>>,
+  CCIfType<[i32, f32, i64], CCAssignToReg<[R10, R11, R12, R13, R14, R15]>>,
 
   // Alternatively, they are assigned to the stack in 4-byte aligned units.
-  CCAssignToStack<4, 4>
+  CCIfType<[i32], CCAssignToStack<4, 4>>,
+  CCIfType<[i64], CCAssignToStack<8, 4>>,
+  CCIfType<[f32], CCAssignToStack<4, 4>>
 ]>;
 
+
+// TODO: the same as earlier
 def RetCC_Sim : CallingConv<[
-  // TODO: choose regs
-  CCIfType<[i32], CCAssignToReg<[R2]>>,
-  CCIfType<[f32], CCAssignToReg<[R2]>>
+  CCIfType<[i32, f32, i64], CCAssignToReg<[R10, R11, R12, R13, R14, R15]>>,
+
+  // Alternatively, they are assigned to the stack in 4-byte aligned units.
+  CCIfType<[i32], CCAssignToStack<4, 4>>,
+  CCIfType<[i64], CCAssignToStack<8, 4>>,
+  CCIfType<[f32], CCAssignToStack<4, 4>>
 ]>;
 
-def CSR_Sim : CalleeSavedRegs<(add R2, R3, (sequence "R%d", 5, 8))>;
+def CSR_Sim : CalleeSavedRegs<(add R2, R3, R5, R6, R7, R8)>;

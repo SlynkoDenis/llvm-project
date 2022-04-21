@@ -408,7 +408,7 @@ storeRegToStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
       MachinePointerInfo::getFixedStack(*MF, FI), MachineMemOperand::MOStore,
       MFI.getObjectSize(FI), MFI.getObjectAlign(FI));
 
-  BuildMI(MBB, I, DL, get(SIM::ST))
+  BuildMI(MBB, I, DL, get(SIM::STi))
       .addReg(SrcReg, getKillRegState(isKill))
       .addFrameIndex(FI)
       .addImm(0)

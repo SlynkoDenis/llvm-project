@@ -28,30 +28,29 @@ public:
   ~SimTargetMachine() override = default;
 
   const SimSubtarget *getSubtargetImpl() const {
-      return &Subtarget;
+    return &Subtarget;
   }
   const SimSubtarget *getSubtargetImpl(const Function &) const override {
     return &Subtarget; 
   }
 
   // Pass Pipeline Configuration
-  // TargetPassConfig *createPassConfig(PassManagerBase &PM) override;
+  TargetPassConfig *createPassConfig(PassManagerBase &PM) override;
   TargetLoweringObjectFile *getObjFileLowering() const override {
-      return TLOF.get();
+    return TLOF.get();
   }
 
-  bool
-  addPassesToEmitFile(PassManagerBase &, raw_pwrite_stream &,
-                      raw_pwrite_stream *, CodeGenFileType,
-                      bool /*DisableVerify*/ = true,
-                      MachineModuleInfoWrapperPass *MMIWP = nullptr) override {
-    return false;
-  }
+  // bool
+  // addPassesToEmitFile(PassManagerBase &, raw_pwrite_stream &,
+  //                     raw_pwrite_stream *, CodeGenFileType,
+  //                     bool /*DisableVerify*/ = true,
+  //                     MachineModuleInfoWrapperPass *MMIWP = nullptr) override {
+  //   return false;
+  // }
 
 private:
   std::unique_ptr<TargetLoweringObjectFile> TLOF;
   SimSubtarget Subtarget;
-  mutable StringMap<std::unique_ptr<SimSubtarget>> SubtargetMap;
 };
 }   // llvm
 
