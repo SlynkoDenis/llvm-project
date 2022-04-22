@@ -12,8 +12,6 @@
 
 def CC_Sim : CallingConv<[
   CCIfType<[i8, i16], CCPromoteToType<i32>>,
-  // TODO: choose reg and decide if it's needed here
-  // CCIfSRet<CCIfType<[i32], CCAssignToReg<[R14]>>>,
   // i32 f32 arguments get passed in integer registers if there is space.
   CCIfType<[i32, f32, i64], CCAssignToReg<[R10, R11, R12, R13, R14, R15]>>,
 
@@ -24,7 +22,6 @@ def CC_Sim : CallingConv<[
 ]>;
 
 
-// TODO: the same as earlier
 def RetCC_Sim : CallingConv<[
   CCIfType<[i32, f32, i64], CCAssignToReg<[R10, R11, R12, R13, R14, R15]>>,
 

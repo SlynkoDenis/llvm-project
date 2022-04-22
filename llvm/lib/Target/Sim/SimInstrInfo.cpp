@@ -43,7 +43,6 @@ SimInstrInfo::SimInstrInfo(SimSubtarget &ST)
 /// any side effects other than loading from the stack slot.
 unsigned SimInstrInfo::isLoadFromStackSlot(const MachineInstr &MI,
                                            int &FrameIndex) const {
-  // TODO: add SIM::LD here?
   if (MI.getOpcode() == SIM::LDi) {
     if (MI.getOperand(1).isFI() && MI.getOperand(2).isImm() &&
         MI.getOperand(2).getImm() == 0) {
@@ -327,6 +326,7 @@ storeRegToStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
       MachinePointerInfo::getFixedStack(*MF, FI), MachineMemOperand::MOStore,
       MFI.getObjectSize(FI), MFI.getObjectAlign(FI));
 
+  // STi must be agreed with isStoreToStackSlot()
   BuildMI(MBB, I, DL, get(SIM::STi))
       .addReg(SrcReg, getKillRegState(isKill))
       .addFrameIndex(FI)
@@ -350,6 +350,7 @@ loadRegFromStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
       MachinePointerInfo::getFixedStack(*MF, FI), MachineMemOperand::MOLoad,
       MFI.getObjectSize(FI), MFI.getObjectAlign(FI));
 
+  // LDi must be agreed with isLoadFromStackSlot()
   BuildMI(MBB, I, DL, get(SIM::LDi), DestReg)
       .addFrameIndex(FI)
       .addImm(0)

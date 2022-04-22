@@ -230,7 +230,6 @@ def B        : SimInst<0x02, (outs), (ins BTARGET16:$r3_imm), "B\t$r3_imm", [(br
   let r1 = 0;
   let r2 = 0;
 }
-def BR       : SimInstBranch<0x05, (outs), (ins GPR:$r1), "BR\t$r1", [(brind GPR:$r1)]>;
 def BEQ      : BCOND<0x06, "BEQ">;
 def BNE      : BCOND<0x07, "BNE">;
 def BGT      : BCOND<0x08, "BGT">;
@@ -238,8 +237,8 @@ def BLE      : BCOND<0x09, "BLE">;
 }
 
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0, isCall = 1, isBranch = 1, isTerminator = 1 in {
-// def BR : SimInst<0x05, (outs), (ins GPR:$r1), "BR\t$r1",
-//                  [(brind GPR:$r1)]>;
+def BR : SimInst<0x05, (outs), (ins GPR:$r1), "BR\t$r1",
+                 [(brind GPR:$r1)]>;
 def BL : SimInst<0x03, (outs GPR:$r1), (ins CTARGET16:$r3_imm),
                  "BL\t$r1, $r3_imm", []>;
 }
@@ -247,23 +246,6 @@ def BL : SimInst<0x03, (outs GPR:$r1), (ins CTARGET16:$r3_imm),
 //===----------------------------------------------------------------------===//
 // Loads definitions
 //===----------------------------------------------------------------------===//
-
-// let hasSideEffects = 0, mayLoad = 1, mayStore = 0 in
-// class Load_ri<string opcodestr>
-//     : SimInst<OPC_LOAD, (outs GPR:$rd), (ins GPR:$rs1, simm12:$imm12),
-//               opcodestr, "$rd, ${imm12}(${rs1})">;
-
-// def LW  : Load_ri<"lw">, Sched<[WriteLDW, ReadMemBase]>;
-
-// multiclass LdPat<PatFrag LoadOp, RVInst Inst, ValueType vt = XLenVT> {
-//   def : Pat<(vt (LoadOp BaseAddr:$rs1)), (Inst BaseAddr:$rs1, 0)>;
-//   def : Pat<(vt (LoadOp (add BaseAddr:$rs1, simm12:$imm12))),
-//             (Inst BaseAddr:$rs1, simm12:$imm12)>;
-//   def : Pat<(vt (LoadOp (IsOrAdd AddrFI:$rs1, simm12:$imm12))),
-//             (Inst AddrFI:$rs1, simm12:$imm12)>;
-// }
-
-// defm : LdPat<load, LW, i32>, Requires<[IsRV32]>;
 
 def LD       : SimInst<0x70, (outs GPR:$r1), (ins GPR:$r2, GPR:$r3_imm),
                        "LD\t$r1, $r2, $r3_imm",
@@ -281,7 +263,6 @@ def LDi      : SimInst<0x72, (outs GPR:$r1), (ins GPR:$r2, SIMM16:$r3_imm),
   let mayStore = 0;
 }
 
-// TODO: reconstruct this pattern in a proper form
 def LDI_: SimInst<0x0, (outs GPR:$r1), (ins GPR:$r2, SIMM16:$r3_imm),
                   "LDi\t$r1, ${r2}, ${r3_imm}",
                   []> {
@@ -294,20 +275,6 @@ def : Pat<(i32 (load ADDRrr:$r1)), (LDI_ ADDRrr:$r1, 0)>;
 //===----------------------------------------------------------------------===//
 // Stores definitions
 //===----------------------------------------------------------------------===//
-
-// multiclass StPat<PatFrag StoreOp, RVInst Inst, RegisterClass StTy,
-//                  ValueType vt> {
-//   def : Pat<(StoreOp (vt StTy:$rs2), BaseAddr:$rs1),
-//             (Inst StTy:$rs2, BaseAddr:$rs1, 0)>;
-//   def : Pat<(StoreOp (vt StTy:$rs2), (add BaseAddr:$rs1, simm12:$imm12)),
-//             (Inst StTy:$rs2, BaseAddr:$rs1, simm12:$imm12)>;
-//   def : Pat<(StoreOp (vt StTy:$rs2), (IsOrAdd AddrFI:$rs1, simm12:$imm12)),
-//             (Inst StTy:$rs2, AddrFI:$rs1, simm12:$imm12)>;
-// }
-
-// defm : StPat<truncstorei8, SB, GPR, XLenVT>;
-// defm : StPat<truncstorei16, SH, GPR, XLenVT>;
-// defm : StPat<store, SW, GPR, i32>, Requires<[IsRV32]>;
 
 def ST       : SimInst<0x71, (outs), (ins GPR:$r1, GPR:$r2, GPR:$r3_imm),
                        "ST\t$r1, $r2, $r3_imm",
@@ -325,13 +292,6 @@ def STi      : SimInst<0x73, (outs), (ins GPR:$r1, GPR:$r2, SIMM16:$r3_imm),
   let mayStore = 1;
 }
 
-// def STI_: SimInst<0x71, (outs), (ins GPR:$r1, GPR:$r2, SIMM16:$r3_imm),
-//                   "STi\t$r1, ${r2}, ${r3_imm}",
-//                   []> {
-//   let hasSideEffects = 0;
-//   let mayLoad = 0;
-//   let mayStore = 1;
-// }
 def : Pat<(store (i32 GPR:$r1), ADDRri:$r2),
           (STi GPR:$r1, ADDRri:$r2, 0)>;
 
@@ -348,7 +308,7 @@ def ADJCALLSTACKUP : SimPseudoInst<(outs), (ins i32imm:$amt1, i32imm:$amt2),
                             [(callseq_end timm:$amt1, timm:$amt2)]>;
 }
 
-// TODO: redefine RA from R0 to smth else?
+// RA == R0
 def PseudoRET : SimPseudoInst<(outs), (ins), "# PseudoRET",
                               [(SimRet)]>,
                               PseudoInstExpansion<(BR R0)> {
@@ -362,6 +322,7 @@ def PseudoCALL : SimPseudoInst<(outs), (ins CTARGET16:$func), "# PseudoCALL",
                                [(SimCall tglobaladdr:$func)]>,
                                PseudoInstExpansion<(BL R0, CTARGET16:$func)>;
 
+// TODO: implement it
 // let isCall = 1, Defs = [R0] in
 // def PseudoCALLInd : SimPseudoInst<(outs), (ins GPR:$rs1), "# PseudoCALLInd",
 //                     [(SimCall GPR:$rs1)]>,

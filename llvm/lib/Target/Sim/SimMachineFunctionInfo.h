@@ -19,10 +19,10 @@ namespace llvm {
 class SimMachineFunctionInfo : public MachineFunctionInfo {
 public:
     SimMachineFunctionInfo()
-      : GlobalBaseReg(0), VarArgsFrameOffset(0), VarArgsSaveSize(0), SRetReturnReg(0),
+      : GlobalBaseReg(0), VarArgsFrameOffset(0), VarArgsSaveSize(0),
         IsLeafProc(false) {}
     explicit SimMachineFunctionInfo(MachineFunction &MF)
-      : GlobalBaseReg(0), VarArgsFrameOffset(0), VarArgsSaveSize(0), SRetReturnReg(0),
+      : GlobalBaseReg(0), VarArgsFrameOffset(0), VarArgsSaveSize(0),
         IsLeafProc(false) {}
 
     Register getGlobalBaseReg() const { return GlobalBaseReg; }
@@ -33,9 +33,6 @@ public:
 
     int getVarArgsFrameOffset() const { return VarArgsFrameOffset; }
     void setVarArgsFrameOffset(int Offset) { VarArgsFrameOffset = Offset; }
-
-    Register getSRetReturnReg() const { return SRetReturnReg; }
-    void setSRetReturnReg(Register Reg) { SRetReturnReg = Reg; }
 
     void setLeafProc(bool rhs) { IsLeafProc = rhs; }
     bool isLeafProc() const { return IsLeafProc; }
@@ -49,10 +46,6 @@ public:
     int VarArgsFrameOffset;
 
     int VarArgsSaveSize;
-
-    /// SRetReturnReg - Holds the virtual register into which the sret
-    /// argument is passed.
-    Register SRetReturnReg;
 
     /// IsLeafProc - True if the function is a leaf procedure.
     bool IsLeafProc;

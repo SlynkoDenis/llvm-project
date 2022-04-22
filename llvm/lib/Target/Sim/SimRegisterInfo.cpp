@@ -59,11 +59,6 @@ BitVector SimRegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   Reserved.set(SIM::R1);
   Reserved.set(SIM::R2);
   Reserved.set(SIM::R3);
-  // Reserved.set(SIM::R10);
-  // Reserved.set(SIM::R11);
-  // Reserved.set(SIM::R12);
-  // Reserved.set(SIM::R13);
-  // Reserved.set(SIM::R14);
 
   return Reserved;
 }

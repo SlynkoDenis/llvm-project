@@ -52,34 +52,6 @@ void SimFrameLowering::emitRegAdjustment(MachineBasicBlock &MBB,
   return;
 }
 
-// void SimFrameLowering::saveFP(MachineBasicBlock &MBB,
-//                               MachineBasicBlock::iterator MBBI,
-//                               int NumBytes) const {
-//   // MachineMemOperand *MMO = MF->getMachineMemOperand(
-//   //     MachinePointerInfo::getFixedStack(*MF, FI), MachineMemOperand::MOStore,
-//   //     MFI.getObjectSize(FI), MFI.getObjectAlign(FI));
-//   const SimInstrInfo &TII =
-//     *static_cast<const SimInstrInfo *>(ST.getInstrInfo());
-//   DebugLoc DL;
-//   BuildMI(MBB, MBBI, DL, TII.get(SIM::STi))
-//     .addReg(SIM::FP)
-//     .addReg(SIM::SP)
-//     .addImm(NumBytes);
-// }
-
-// void SimFrameLowering::restoreFP(MachineBasicBlock &MBB,
-//                                  MachineBasicBlock::iterator MBBI) const {
-//   // MachineMemOperand *MMO = MF->getMachineMemOperand(
-//   //     MachinePointerInfo::getFixedStack(*MF, FI), MachineMemOperand::MOStore,
-//   //     MFI.getObjectSize(FI), MFI.getObjectAlign(FI));
-//   const SimInstrInfo &TII =
-//     *static_cast<const SimInstrInfo *>(ST.getInstrInfo());
-//   DebugLoc DL;
-//   BuildMI(MBB, MBBI, DL, TII.get(SIM::LDi), SIM::FP)
-//     .addReg(SIM::SP)
-//     .addImm(-4);
-// }
-
 void SimFrameLowering::emitPrologue(MachineFunction &MF,
                                     MachineBasicBlock &MBB) const {
     SimMachineFunctionInfo *FuncInfo = MF.getInfo<SimMachineFunctionInfo>();
@@ -113,7 +85,7 @@ void SimFrameLowering::emitPrologue(MachineFunction &MF,
 
     // Finally, ensure that the size is sufficiently aligned for the
     // data on the stack.
-    // TODO: alignment to 8 bytes; delete it?
+    // TODO: alignment to 8 bytes, may be needed for long/double args
     // NumBytes = alignTo(NumBytes, MFI.getMaxAlign());
 
     // Adjust SP for the number of bytes required for this function
@@ -128,10 +100,11 @@ void SimFrameLowering::emitPrologue(MachineFunction &MF,
       return;
     }
 
-    // saveFP(MBB, MBBI, NumBytes - 4);
+    // FP saved in spillCalleeSavedRegisters
 
+    NumBytes -= FuncInfo->getVarArgsSaveSize();
     // Set new FP value
-    emitRegAdjustment(MBB, MBBI, NumBytes - FuncInfo->getVarArgsSaveSize(),
+    emitRegAdjustment(MBB, MBBI, NumBytes,
                       MachineInstr::FrameSetup,
                       SIM::SP, SIM::FP);
 }
@@ -177,8 +150,6 @@ void SimFrameLowering::emitEpilogue(MachineFunction &MF,
     if (!hasFP(MF)) {
       return;
     }
-
-    // restoreFP(MBB, MBBI);
 }
 
 bool SimFrameLowering::spillCalleeSavedRegisters(MachineBasicBlock &MBB,
@@ -224,7 +195,6 @@ bool SimFrameLowering::restoreCalleeSavedRegisters(MachineBasicBlock &MBB,
   return true;
 }
 
-// TODO: delete this function and usage
 bool SimFrameLowering::hasReservedCallFrame(const MachineFunction &MF) const {
     // Reserve call frame if there are no variable sized objects on the stack.
     return !MF.getFrameInfo().hasVarSizedObjects();
@@ -242,18 +212,8 @@ bool SimFrameLowering::hasFP(const MachineFunction &MF) const {
          MFI.isFrameAddressTaken();
 }
 
-StackOffset
-SimFrameLowering::getFrameIndexReference(const MachineFunction &MF, int FI,
-                                         Register &FrameReg) const {
-  const MachineFrameInfo &MFI = MF.getFrameInfo();
-  const SimRegisterInfo *RegInfo = ST.getRegisterInfo();
-  // const SimMachineFunctionInfo *FuncInfo = MF.getInfo<SimMachineFunctionInfo>();
-  bool isFixed = MFI.isFixedObjectIndex(FI);
-
-  // TODO: taken from RISCV; need to add VarArgsSaveSize
-  int FrameOffset = MFI.getObjectOffset(FI) - getOffsetOfLocalArea() +
-                    MFI.getOffsetAdjustment();
-
+static bool isFrameIndexInCalleeSavedRegion(const MachineFrameInfo &MFI,
+                                            int FI) {
   // Callee-saved registers should be referenced relative to the stack
   // pointer (positive offset), otherwise use the frame pointer (negative
   // offset).
@@ -265,11 +225,33 @@ SimFrameLowering::getFrameIndexReference(const MachineFunction &MF, int FI,
     MaxCSFI = CSI[CSI.size() - 1].getFrameIdx();
   }
 
+  return (FI >= MinCSFI && FI <= MaxCSFI);
+}
+
+StackOffset
+SimFrameLowering::getFrameIndexReference(const MachineFunction &MF, int FI,
+                                         Register &FrameReg) const {
+  const MachineFrameInfo &MFI = MF.getFrameInfo();
+  const SimRegisterInfo *RegInfo = ST.getRegisterInfo();
+  const SimMachineFunctionInfo *FuncInfo = MF.getInfo<SimMachineFunctionInfo>();
+  // TODO: resolve this
+  // bool isFixed = MFI.isFixedObjectIndex(FI);
+
+  // TODO: taken from RISCV; need to add VarArgsSaveSize
+  int FrameOffset = MFI.getObjectOffset(FI) - getOffsetOfLocalArea() +
+                    MFI.getOffsetAdjustment();
+
   // Addressable stack objects are accessed using neg. offsets from
   // %fp, or positive offsets from %sp.
   bool UseFP;
 
-  if (FI >= MinCSFI && FI <= MaxCSFI) {
+  if (isFrameIndexInCalleeSavedRegion(MFI, FI)) {
+    UseFP = false;
+  } else if (FuncInfo->isLeafProc()) {
+    // If there's a leaf proc, all offsets need to be %sp-based,
+    // because we haven't caused %fp to actually point to our frame.
+    // TODO: research this case
+    errs() << "FuncInfo->isLeafProc()\n"; 
     UseFP = false;
   } else if (RegInfo->hasStackRealignment(MF)) {
     llvm_unreachable("TBD");
@@ -287,7 +269,6 @@ SimFrameLowering::getFrameIndexReference(const MachineFunction &MF, int FI,
     return StackOffset::getFixed(FrameOffset);
   } else {
     FrameReg = SIM::SP;
-    // TODO: don't add MF.getFrameInfo().getStackSize()?
     return StackOffset::getFixed(FrameOffset + MF.getFrameInfo().getStackSize());
   }
 }
@@ -299,18 +280,78 @@ bool SimFrameLowering::hasBP(const MachineFunction &MF) const {
   return MFI.hasVarSizedObjects() && TRI->hasStackRealignment(MF);
 }
 
+void SimFrameLowering::remapRegsForLeafProc(MachineFunction &MF) const {
+  llvm_unreachable("TBD");
+  // MachineRegisterInfo &MRI = MF.getRegInfo();
+  // // Remap %i[0-7] to %o[0-7].
+  // for (unsigned reg = SP::I0; reg <= SP::I7; ++reg) {
+  //   if (!MRI.isPhysRegUsed(reg))
+  //     continue;
+
+  //   unsigned mapped_reg = reg - SP::I0 + SP::O0;
+
+  //   // Replace I register with O register.
+  //   MRI.replaceRegWith(reg, mapped_reg);
+
+  //   // Also replace register pair super-registers.
+  //   if ((reg - SP::I0) % 2 == 0) {
+  //     unsigned preg = (reg - SP::I0) / 2 + SP::I0_I1;
+  //     unsigned mapped_preg = preg - SP::I0_I1 + SP::O0_O1;
+  //     MRI.replaceRegWith(preg, mapped_preg);
+  //   }
+  // }
+
+  // // Rewrite MBB's Live-ins.
+  // for (MachineBasicBlock &MBB : MF) {
+  //   for (unsigned reg = SP::I0_I1; reg <= SP::I6_I7; ++reg) {
+  //     if (!MBB.isLiveIn(reg))
+  //       continue;
+  //     MBB.removeLiveIn(reg);
+  //     MBB.addLiveIn(reg - SP::I0_I1 + SP::O0_O1);
+  //   }
+  //   for (unsigned reg = SP::I0; reg <= SP::I7; ++reg) {
+  //     if (!MBB.isLiveIn(reg))
+  //       continue;
+  //     MBB.removeLiveIn(reg);
+  //     MBB.addLiveIn(reg - SP::I0 + SP::O0);
+  //   }
+  // }
+
+  // assert(verifyLeafProcRegUse(&MRI));
+}
+
+bool SimFrameLowering::isLeafProc(MachineFunction &MF) const
+{
+  MachineRegisterInfo &MRI = MF.getRegInfo();
+  MachineFrameInfo    &MFI = MF.getFrameInfo();
+
+  // TODO: change R12 to smth else
+  return !(MFI.hasCalls()                    // has calls
+           || MRI.isPhysRegUsed(SIM::R12)    // Too many registers needed
+           || MRI.isPhysRegUsed(SIM::SP)     // %sp is used
+           || hasFP(MF));                    // need %fp
+}
+
 void SimFrameLowering::determineCalleeSaves(MachineFunction &MF,
                                               BitVector &SavedRegs,
                                               RegScavenger *RS) const {
   TargetFrameLowering::determineCalleeSaves(MF, SavedRegs, RS);
-  // Unconditionally spill RA and FP only if the function uses a frame
-  // pointer.
-  if (hasFP(MF)) {
-    SavedRegs.set(SIM::RA);
-    SavedRegs.set(SIM::FP);
-  }
-  // Mark BP as used if function has dedicated base pointer.
-  if (hasBP(MF)) {
-    SavedRegs.set(SIM::BP);
+
+  if (!DisableLeafProc && isLeafProc(MF)) {
+    auto *MFI = MF.getInfo<SimMachineFunctionInfo>();
+    MFI->setLeafProc(true);
+
+    remapRegsForLeafProc(MF);
+  } else {
+    // Unconditionally spill RA and FP only if the function uses a frame
+    // pointer.
+    if (hasFP(MF)) {
+      SavedRegs.set(SIM::RA);
+      SavedRegs.set(SIM::FP);
+    }
+    // Mark BP as used if function has dedicated base pointer.
+    if (hasBP(MF)) {
+      SavedRegs.set(SIM::BP);
+    }
   }
 }

@@ -68,12 +68,8 @@ private:
                          MachineInstr::MIFlag Flag,
                          Register Src, Register Dest) const;
 
-  // void saveFP(MachineBasicBlock &MBB,
-  //             MachineBasicBlock::iterator MBBI,
-  //             int NumBytes) const;
-
-  // void restoreFP(MachineBasicBlock &MBB,
-  //                MachineBasicBlock::iterator MBBI) const;
+  bool isLeafProc(MachineFunction &MF) const;
+  void remapRegsForLeafProc(MachineFunction &MF) const;
 
   const SimSubtarget &ST;
 };

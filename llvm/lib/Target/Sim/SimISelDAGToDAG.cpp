@@ -80,7 +80,7 @@ bool SimDAGToDAGISel::SelectADDRrr(SDValue Addr, SDValue &R) {
 }
 
 void SimDAGToDAGISel::Select(SDNode *N) {
-    // TODO: implement custom handling
+    // TODO: implement custom selectors
   SDLoc dl(N);
   if (N->isMachineOpcode()) {
     LLVM_DEBUG(dbgs() << "== "; N->dump(CurDAG); dbgs() << "\n");
@@ -92,11 +92,46 @@ void SimDAGToDAGISel::Select(SDNode *N) {
   MVT VT = N->getSimpleValueType(0);
 
   switch (Opcode) {
+  default:
+    break;
   case ISD::FrameIndex: {
     SDValue Imm = CurDAG->getTargetConstant(0, dl, MVT::i32);
     int FI = cast<FrameIndexSDNode>(N)->getIndex();
     SDValue TFI = CurDAG->getTargetFrameIndex(FI, VT);
     ReplaceNode(N, CurDAG->getMachineNode(SIM::ADDi, dl, VT, TFI, Imm));
+    return;
+  }
+  case ISD::SDIV:
+  case ISD::UDIV: {
+    assert(N->getValueType(0) == MVT::i32 && "can operate only with i32 arguments");
+    llvm_unreachable("TBD");
+
+    // // FIXME: should use a custom expander to expose the SRA to the dag.
+    // SDValue DivLHS = N->getOperand(0);
+    // SDValue DivRHS = N->getOperand(1);
+
+    // // Set the Y register to the high-part.
+    // SDValue TopPart;
+    // if (N->getOpcode() == ISD::SDIV) {
+    //   TopPart = SDValue(CurDAG->getMachineNode(SP::SRAri, dl, MVT::i32, DivLHS,
+    //                                CurDAG->getTargetConstant(31, dl, MVT::i32)),
+    //                     0);
+    // } else {
+    //   TopPart = CurDAG->getRegister(SP::G0, MVT::i32);
+    // }
+    // TopPart = CurDAG->getCopyToReg(CurDAG->getEntryNode(), dl, SP::Y, TopPart,
+    //                                SDValue())
+    //               .getValue(1);
+
+    // // FIXME: Handle div by immediate.
+    // unsigned Opcode = N->getOpcode() == ISD::SDIV ? SP::SDIVrr : SP::UDIVrr;
+    // CurDAG->SelectNodeTo(N, Opcode, MVT::i32, DivLHS, DivRHS, TopPart);
+    // return;
+  }
+  case ISD::SREM:
+  case ISD::UREM: {
+    assert(N->getValueType(0) == MVT::i32 && "can operate only with i32 arguments");
+    llvm_unreachable("TBD");
     return;
   }
   }
