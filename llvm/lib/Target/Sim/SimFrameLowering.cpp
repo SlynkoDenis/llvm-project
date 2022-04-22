@@ -244,28 +244,35 @@ bool SimFrameLowering::hasFP(const MachineFunction &MF) const {
 
 StackOffset
 SimFrameLowering::getFrameIndexReference(const MachineFunction &MF, int FI,
-                                           Register &FrameReg) const {
+                                         Register &FrameReg) const {
   const MachineFrameInfo &MFI = MF.getFrameInfo();
   const SimRegisterInfo *RegInfo = ST.getRegisterInfo();
   // const SimMachineFunctionInfo *FuncInfo = MF.getInfo<SimMachineFunctionInfo>();
   bool isFixed = MFI.isFixedObjectIndex(FI);
 
+  // TODO: taken from RISCV; need to add VarArgsSaveSize
+  int FrameOffset = MFI.getObjectOffset(FI) - getOffsetOfLocalArea() +
+                    MFI.getOffsetAdjustment();
+
+  // Callee-saved registers should be referenced relative to the stack
+  // pointer (positive offset), otherwise use the frame pointer (negative
+  // offset).
+  const auto &CSI = MFI.getCalleeSavedInfo();
+  int MinCSFI = 0;
+  int MaxCSFI = -1;
+  if (CSI.size()) {
+    MinCSFI = CSI[0].getFrameIdx();
+    MaxCSFI = CSI[CSI.size() - 1].getFrameIdx();
+  }
+
   // Addressable stack objects are accessed using neg. offsets from
   // %fp, or positive offsets from %sp.
   bool UseFP;
 
-  // TODO: resolve
-  // Sim uses FP-based references in general, even when "hasFP" is
-  // false. That function is rather a misnomer, because %fp is
-  // actually always available, unless isLeafProc.
-  /*if (FuncInfo->isLeafProc()) {
-    // If there's a leaf proc, all offsets need to be %sp-based,
-    // because we haven't caused %fp to actually point to our frame.
+  if (FI >= MinCSFI && FI <= MaxCSFI) {
     UseFP = false;
-  } else*/ if (isFixed) {
-    // Otherwise, argument access should always use %fp.
-    UseFP = true;
   } else if (RegInfo->hasStackRealignment(MF)) {
+    llvm_unreachable("TBD");
     // If there is dynamic stack realignment, all local object
     // references need to be via %sp, to take account of the
     // re-alignment.
@@ -275,14 +282,12 @@ SimFrameLowering::getFrameIndexReference(const MachineFunction &MF, int FI,
     UseFP = true;
   }
 
-  int64_t FrameOffset = MF.getFrameInfo().getObjectOffset(FI) +
-      ST.getStackPointerBias();
-
   if (UseFP) {
     FrameReg = RegInfo->getFrameRegister(MF);
     return StackOffset::getFixed(FrameOffset);
   } else {
-    FrameReg = SIM::SP; // %sp
+    FrameReg = SIM::SP;
+    // TODO: don't add MF.getFrameInfo().getStackSize()?
     return StackOffset::getFixed(FrameOffset + MF.getFrameInfo().getStackSize());
   }
 }

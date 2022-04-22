@@ -19,14 +19,17 @@ namespace llvm {
 class SimMachineFunctionInfo : public MachineFunctionInfo {
 public:
     SimMachineFunctionInfo()
-      : GlobalBaseReg(0), VarArgsFrameOffset(0), SRetReturnReg(0),
+      : GlobalBaseReg(0), VarArgsFrameOffset(0), VarArgsSaveSize(0), SRetReturnReg(0),
         IsLeafProc(false) {}
     explicit SimMachineFunctionInfo(MachineFunction &MF)
-      : GlobalBaseReg(0), VarArgsFrameOffset(0), SRetReturnReg(0),
+      : GlobalBaseReg(0), VarArgsFrameOffset(0), VarArgsSaveSize(0), SRetReturnReg(0),
         IsLeafProc(false) {}
 
     Register getGlobalBaseReg() const { return GlobalBaseReg; }
     void setGlobalBaseReg(Register Reg) { GlobalBaseReg = Reg; }
+
+    void setVarArgsSaveSize(int Size) { VarArgsSaveSize = Size; }
+    int getVarArgsSaveSize() const { return VarArgsSaveSize; }
 
     int getVarArgsFrameOffset() const { return VarArgsFrameOffset; }
     void setVarArgsFrameOffset(int Offset) { VarArgsFrameOffset = Offset; }
@@ -44,6 +47,8 @@ public:
 
     /// VarArgsFrameOffset - Frame offset to start of varargs area.
     int VarArgsFrameOffset;
+
+    int VarArgsSaveSize;
 
     /// SRetReturnReg - Holds the virtual register into which the sret
     /// argument is passed.
