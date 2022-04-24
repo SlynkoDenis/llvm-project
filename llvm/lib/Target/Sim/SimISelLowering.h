@@ -28,6 +28,7 @@ namespace SIMISD {
     RET,
     CALL,
     BR_CC,
+    SELECT_CC,
   };
 }
 
@@ -35,6 +36,10 @@ class SimTargetLowering : public TargetLowering {
     const SimSubtarget *Subtarget;
 public:
     SimTargetLowering(const TargetMachine &TM, const SimSubtarget &STI);
+
+    MachineBasicBlock *EmitInstrWithCustomInserter(MachineInstr &MI,
+                                                   MachineBasicBlock *BB) const override;
+
     SDValue LowerOperation(SDValue Op, SelectionDAG &DAG) const override;
 
     const char *getTargetNodeName(unsigned Opcode) const override;
@@ -82,6 +87,9 @@ public:
                             SelectionDAG &DAG) const override {
       llvm_unreachable("TBD");
     }
+
+private:
+    MachineBasicBlock *expandSelectCC(MachineInstr &MI, MachineBasicBlock *BB) const;
 };
 } // end namespace llvm
 

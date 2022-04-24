@@ -9,15 +9,16 @@ namespace SimCC {
 enum CondCodes {
   EQ,
   NE,
-  LE,
+  LT,
   GT,
-  LEU,
-  GTU,
+  // LEU,
+  // GTU,
   INVALID,
 };
 
 CondCodes getOppositeBranchCondition(CondCodes);
 
+// TODO: do u need BRCondCode custom enum?
 enum BRCondCode {
   BREQ = 0x0,
 };

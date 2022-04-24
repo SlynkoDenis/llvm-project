@@ -79,14 +79,14 @@ static SimCC::CondCodes GetOppositeBranchCondition(SimCC::CondCodes CC)
     return SimCC::NE;
   case SimCC::NE:
     return SimCC::EQ;
-  case SimCC::LE:
+  case SimCC::LT:
     return SimCC::GT;
   case SimCC::GT:
-    return SimCC::LE;
-  case SimCC::LEU:
-    return SimCC::GTU;
-  case SimCC::GTU:
-    return SimCC::LEU;
+    return SimCC::LT;
+  // case SimCC::LEU:
+  //   return SimCC::GTU;
+  // case SimCC::GTU:
+  //   return SimCC::LEU;
   }
   llvm_unreachable("Invalid cond code");
 }
@@ -96,7 +96,7 @@ static bool isUncondBranchOpcode(int Opc) {
 }
 
 static bool isCondBranchOpcode(int Opc) {
-  return Opc == SIM::BEQ || Opc == SIM::BNE || Opc == SIM::BGT || Opc == SIM::BLE;
+  return Opc == SIM::BEQ || Opc == SIM::BNE || Opc == SIM::BGT || Opc == SIM::BLT;
 }
 
 static bool isIndirectBranchOpcode(int Opc) {
@@ -111,8 +111,8 @@ const MCInstrDesc &SimInstrInfo::getBranchFromCond(SimCC::CondCodes CC) const {
     return get(SIM::BEQ);
   case SimCC::NE:
     return get(SIM::BNE);
-  case SimCC::LE:
-    return get(SIM::BLE);
+  case SimCC::LT:
+    return get(SIM::BLT);
   case SimCC::GT:
     return get(SIM::BGT);
   // TODO: either add LEU/GTU conditions or delete it
@@ -132,8 +132,8 @@ static SimCC::CondCodes getCondFromBranchOpcode(unsigned Opc) {
     return SimCC::EQ;
   case SIM::BNE:
     return SimCC::NE;
-  case SIM::BLE:
-    return SimCC::LE;
+  case SIM::BLT:
+    return SimCC::LT;
   case SIM::BGT:
     return SimCC::GT;
   // TODO: either add LEU/GTU conditions or delete it
@@ -246,7 +246,7 @@ unsigned SimInstrInfo::insertBranch(MachineBasicBlock &MBB,
                                       const DebugLoc &DL,
                                       int *BytesAdded) const {
   assert(TBB && "insertBranch must not be told to insert a fallthrough");
-  assert((Cond.size() == 1 || Cond.size() == 0) &&
+  assert((Cond.size() == 3 || Cond.size() == 0) &&
          "Sim branch conditions should have one component!");
   assert(!BytesAdded && "code size not handled");
 
@@ -258,9 +258,13 @@ unsigned SimInstrInfo::insertBranch(MachineBasicBlock &MBB,
 
   // Conditional branch
   auto CC = static_cast<SimCC::CondCodes>(Cond[0].getImm());
-  BuildMI(&MBB, DL, getBranchFromCond(CC)).addMBB(TBB).addImm(CC);
-  if (!FBB)
+  BuildMI(&MBB, DL, getBranchFromCond(CC))
+    .addReg(Cond[1].getReg())
+    .addReg(Cond[2].getReg())
+    .addMBB(TBB);
+  if (!FBB) {
     return 1;
+  }
 
   BuildMI(&MBB, DL, get(SIM::B)).addMBB(FBB);
   return 2;
@@ -291,7 +295,7 @@ unsigned SimInstrInfo::removeBranch(MachineBasicBlock &MBB,
 
 bool SimInstrInfo::reverseBranchCondition(
     SmallVectorImpl<MachineOperand> &Cond) const {
-  assert(Cond.size() == 1);
+  assert(Cond.size() == 1 || Cond.size() == 3);
   SimCC::CondCodes CC = static_cast<SimCC::CondCodes>(Cond[0].getImm());
   Cond[0].setImm(GetOppositeBranchCondition(CC));
   return false;

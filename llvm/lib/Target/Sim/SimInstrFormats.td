@@ -66,16 +66,6 @@ class ALU_rr<bits<8> opcode, string asmstr,
              list<dag> pattern> : SimInstRegister<opcode, (outs GPR:$r1), (ins GPR:$r2, GPR:$r3),
                                                   asmstr # "\t" # "$r1, $r2, $r3", pattern>;
 
-
-class SimInstBranch<bits<8> opcode, dag outs,
-                    dag ins, string asmstr,
-                    list<dag> pattern> : SimInst<opcode, outs, ins, asmstr, pattern>;
-
-
-class BCOND<bits<8> opcode, string asmstr> : SimInstBranch<opcode, (outs), (ins GPR:$r1, GPR:$r2, GPR:$imm16),
-                                                           asmstr # "\t" # "$r1, $r2, $imm16", []>;
-
-
 // Pseudo instructions format
 class SimPseudoInst<dag outs, dag ins, string asmstr, list<dag> pattern>
    : SimInst<0, outs, ins, asmstr, pattern> {

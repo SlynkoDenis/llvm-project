@@ -142,7 +142,7 @@ SDValue SimTargetLowering::LowerFormalArguments(
     SelectionDAG &DAG, SmallVectorImpl<SDValue> &InVals) const {
   MachineFunction &MF = DAG.getMachineFunction();
   MachineRegisterInfo &RegInfo = MF.getRegInfo();
-  SimMachineFunctionInfo *FuncInfo = MF.getInfo<SimMachineFunctionInfo>();
+  // SimMachineFunctionInfo *FuncInfo = MF.getInfo<SimMachineFunctionInfo>();
 
   // Assign locations to all of the incoming arguments.
   SmallVector<CCValAssign, 16> ArgLocs;
@@ -156,7 +156,7 @@ SDValue SimTargetLowering::LowerFormalArguments(
 
     if (VA.isRegLoc()) {
       EVT LocVT = VA.getLocVT();
-      const TargetRegisterClass *RC = TLI.getRegClassFor(LocVT.getSimpleVT());
+      const TargetRegisterClass *RC = getRegClassFor(LocVT.getSimpleVT());
       Register VReg = RegInfo.createVirtualRegister(RC);
       MF.getRegInfo().addLiveIn(VA.getLocReg(), VReg);
       SDValue Arg = DAG.getCopyFromReg(Chain, dl, VReg, MVT::i32);
@@ -520,11 +520,24 @@ SimTargetLowering::SimTargetLowering(const TargetMachine &TM,
 
   setStackPointerRegisterToSaveRestore(SIM::SP);
 
-  for (unsigned Opc = 0; Opc < ISD::BUILTIN_OP_END; ++Opc)
+  for (unsigned Opc = 0; Opc < ISD::BUILTIN_OP_END; ++Opc) {
     setOperationAction(Opc, MVT::i32, Expand);
+  }
 
+  // TODO: add branches?
   setOperationAction(ISD::ADD, MVT::i32, Legal);
+  setOperationAction(ISD::SUB, MVT::i32, Legal);
   setOperationAction(ISD::MUL, MVT::i32, Legal);
+  setOperationAction(ISD::SDIV, MVT::i32, Legal);
+  setOperationAction(ISD::SREM, MVT::i32, Legal);
+
+  setOperationAction(ISD::AND, MVT::i32, Legal);
+  setOperationAction(ISD::OR, MVT::i32, Legal);
+  setOperationAction(ISD::XOR, MVT::i32, Legal);
+
+  setOperationAction(ISD::SHL, MVT::i32, Legal);
+  setOperationAction(ISD::SRA, MVT::i32, Legal);
+  setOperationAction(ISD::SRL, MVT::i32, Legal);
 
   setOperationAction(ISD::LOAD, MVT::i32, Legal);
   setOperationAction(ISD::STORE, MVT::i32, Legal);
@@ -535,6 +548,9 @@ SimTargetLowering::SimTargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::BR_CC, MVT::i32, Custom);
 
   setOperationAction(ISD::FRAMEADDR, MVT::i32, Legal);
+
+  setOperationAction(ISD::SELECT, MVT::i32, Expand);
+  setOperationAction(ISD::SELECT_CC, MVT::i32, Custom);
   // setTargetDAGCombine(ISD::BITCAST);
 
   // setOperationAction(ISD::INTRINSIC_WO_CHAIN, MVT::Other, Custom);
@@ -548,6 +564,7 @@ const char *SimTargetLowering::getTargetNodeName(unsigned Opcode) const {
   case SIMISD::RET:             return "SIMISD::RET";
   case SIMISD::CALL:            return "SIMISD::CALL";
   case SIMISD::BR_CC:           return "SIMISD::BR_CC";
+  case SIMISD::SELECT_CC:       return "SIMISD::SELECT_CC";
   }
   return nullptr;
 }
@@ -584,6 +601,97 @@ bool SimTargetLowering::isLegalAddressingMode(const DataLayout &DL,
   return true;
 }
 
+MachineBasicBlock *
+SimTargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
+                                               MachineBasicBlock *BB) const {
+  switch (MI.getOpcode()) {
+  default: llvm_unreachable("Unknown SELECT_CC!");
+  case SIM::PseudoSELECT_CC:
+    return expandSelectCC(MI, BB);
+  }
+}
+
+static unsigned convertCondCodeToInstruction(unsigned CC) {
+  unsigned BROpcode = 0;
+  switch(CC) {
+  default:
+    llvm_unreachable("");
+    break;
+  case ISD::CondCode::SETEQ:
+    BROpcode = SIM::BEQ;
+    break;
+  case ISD::CondCode::SETNE:
+    BROpcode = SIM::BNE;
+    break;
+  case ISD::CondCode::SETLT:
+    BROpcode = SIM::BLT;
+    break;
+  case ISD::CondCode::SETGT:
+    BROpcode = SIM::BGT;
+    break;
+  }
+  return BROpcode;
+}
+
+MachineBasicBlock *
+SimTargetLowering::expandSelectCC(MachineInstr &MI, MachineBasicBlock *BB) const {
+  const TargetInstrInfo &TII = *Subtarget->getInstrInfo();
+  DebugLoc dl = MI.getDebugLoc();
+  // unsigned CC = (SimCC::CondCodes)MI.getOperand(4).getImm();
+  unsigned CC = (ISD::CondCode)MI.getOperand(5).getImm();
+
+  unsigned BROpcode = convertCondCodeToInstruction(CC);
+
+  // To "insert" a SELECT_CC instruction, we actually have to insert the
+  // triangle control-flow pattern. The incoming instruction knows the
+  // destination vreg to set, the condition code register to branch on, the
+  // true/false values to select between, and the condition code for the branch.
+  //
+  // We produce the following control flow:
+  //     ThisMBB
+  //     |  \
+  //     |  IfFalseMBB
+  //     | /
+  //    SinkMBB
+  const BasicBlock *LLVM_BB = BB->getBasicBlock();
+  MachineFunction::iterator It = ++BB->getIterator();
+
+  MachineBasicBlock *ThisMBB = BB;
+  MachineFunction *F = BB->getParent();
+  MachineBasicBlock *IfFalseMBB = F->CreateMachineBasicBlock(LLVM_BB);
+  MachineBasicBlock *SinkMBB = F->CreateMachineBasicBlock(LLVM_BB);
+  F->insert(It, IfFalseMBB);
+  F->insert(It, SinkMBB);
+
+  // Transfer the remainder of ThisMBB and its successor edges to SinkMBB.
+  SinkMBB->splice(SinkMBB->begin(), ThisMBB,
+                  std::next(MachineBasicBlock::iterator(MI)), ThisMBB->end());
+  SinkMBB->transferSuccessorsAndUpdatePHIs(ThisMBB);
+
+  // Set the new successors for ThisMBB.
+  ThisMBB->addSuccessor(IfFalseMBB);
+  ThisMBB->addSuccessor(SinkMBB);
+
+  BuildMI(ThisMBB, dl, TII.get(BROpcode))
+    .addReg(MI.getOperand(1).getReg())
+    .addReg(MI.getOperand(2).getReg())
+    .addMBB(SinkMBB);
+
+  // IfFalseMBB just falls through to SinkMBB.
+  IfFalseMBB->addSuccessor(SinkMBB);
+
+  // %Result = phi [ %TrueValue, ThisMBB ], [ %FalseValue, IfFalseMBB ]
+  BuildMI(*SinkMBB, SinkMBB->begin(), dl, TII.get(SIM::PHI),
+          MI.getOperand(0).getReg())
+      .addReg(MI.getOperand(3).getReg())
+      .addMBB(ThisMBB)
+      .addReg(MI.getOperand(4).getReg())
+      .addMBB(IfFalseMBB);
+
+  MI.eraseFromParent(); // The pseudo instruction is gone now.
+  return SinkMBB;
+}
+
 static SDValue LowerFRAMEADDR(SDValue Op, SelectionDAG &DAG,
                               const SimSubtarget *Subtarget) {
   const auto &RI = *Subtarget->getRegisterInfo();
@@ -607,7 +715,7 @@ static SDValue LowerBR_CC(SDValue Op, SelectionDAG &DAG) {
 
   assert(LHS.getValueType() == MVT::i32);
 
-  if (CC == ISD::CondCode::SETGE) {
+  if (CC == ISD::CondCode::SETGT) {
     CC = ISD::getSetCCSwappedOperands(CC);
     std::swap(LHS, RHS);
   }
@@ -617,6 +725,26 @@ static SDValue LowerBR_CC(SDValue Op, SelectionDAG &DAG) {
                      LHS, RHS, TargetCC, Dest);
 }
 
+static SDValue LowerSELECT_CC(SDValue Op, SelectionDAG &DAG) {
+  SDValue LHS = Op.getOperand(0);
+  SDValue RHS = Op.getOperand(1);
+  ISD::CondCode CC = cast<CondCodeSDNode>(Op.getOperand(4))->get();
+  SDValue TrueVal = Op.getOperand(2);
+  SDValue FalseVal = Op.getOperand(3);
+  SDLoc dl(Op);
+
+  if (LHS.getValueType() != MVT::i32
+      || RHS.getValueType() != MVT::i32
+      || TrueVal.getValueType() != MVT::i32
+      || FalseVal.getValueType() != MVT::i32) {
+    llvm_unreachable("must be integer type");
+  }
+
+  SDValue TargetCC = DAG.getConstant(CC, dl, MVT::i32);
+  return DAG.getNode(SIMISD::SELECT_CC, dl, TrueVal.getValueType(),
+                     {LHS, RHS, TrueVal, FalseVal, TargetCC});
+}
+
 SDValue SimTargetLowering::
 LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   switch (Op.getOpcode()) {
@@ -624,11 +752,12 @@ LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   case ISD::FRAMEADDR:          return LowerFRAMEADDR(Op, DAG,
                                                       Subtarget);
   case ISD::BR_CC:              return LowerBR_CC(Op, DAG);
+  case ISD::SELECT_CC:          return LowerSELECT_CC(Op, DAG);
   }
 }
 
 SDValue SimTargetLowering::PerformDAGCombine(SDNode *N,
-                                               DAGCombinerInfo &DCI) const {
+                                             DAGCombinerInfo &DCI) const {
   // TODO: do smth smart
   // switch (N->getOpcode()) {
   // default:
