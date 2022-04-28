@@ -530,6 +530,7 @@ SimTargetLowering::SimTargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::MUL, MVT::i32, Legal);
   setOperationAction(ISD::SDIV, MVT::i32, Legal);
   setOperationAction(ISD::SREM, MVT::i32, Legal);
+  setOperationAction(ISD::UREM, MVT::i32, Expand);
 
   setOperationAction(ISD::AND, MVT::i32, Legal);
   setOperationAction(ISD::OR, MVT::i32, Legal);
@@ -542,9 +543,12 @@ SimTargetLowering::SimTargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::LOAD, MVT::i32, Legal);
   setOperationAction(ISD::STORE, MVT::i32, Legal);
 
+  // don't set Custom ConstantPool, instead match constants with pattern in InstrInfo.td
   setOperationAction(ISD::Constant, MVT::i32, Legal);
   setOperationAction(ISD::UNDEF, MVT::i32, Legal);
 
+  // TODO: try not to expand BRCOND
+  setOperationAction(ISD::BRCOND, MVT::Other, Expand);
   setOperationAction(ISD::BR_CC, MVT::i32, Custom);
 
   setOperationAction(ISD::FRAMEADDR, MVT::i32, Legal);
@@ -623,8 +627,8 @@ static unsigned convertCondCodeToInstruction(unsigned CC) {
   case ISD::CondCode::SETNE:
     BROpcode = SIM::BNE;
     break;
-  case ISD::CondCode::SETLT:
-    BROpcode = SIM::BLT;
+  case ISD::CondCode::SETLE:
+    BROpcode = SIM::BLE;
     break;
   case ISD::CondCode::SETGT:
     BROpcode = SIM::BGT;
@@ -706,6 +710,20 @@ static SDValue LowerFRAMEADDR(SDValue Op, SelectionDAG &DAG,
   return FrameAddr;
 }
 
+static void translateSetCCForBranch(const SDLoc &DL, SDValue &LHS, SDValue &RHS,
+                                    ISD::CondCode &CC, SelectionDAG &DAG) {
+  switch (CC) {
+  default:
+    break;
+  case ISD::SETLT:
+  case ISD::SETGE:
+    // We don't implement BLT and BGE instructions - must replace them on opposite
+    CC = ISD::getSetCCSwappedOperands(CC);
+    std::swap(LHS, RHS);
+    break;
+  }
+}
+
 static SDValue LowerBR_CC(SDValue Op, SelectionDAG &DAG) {
   ISD::CondCode CC = cast<CondCodeSDNode>(Op.getOperand(1))->get();
   SDValue LHS = Op.getOperand(2);
@@ -715,10 +733,7 @@ static SDValue LowerBR_CC(SDValue Op, SelectionDAG &DAG) {
 
   assert(LHS.getValueType() == MVT::i32);
 
-  if (CC == ISD::CondCode::SETGT) {
-    CC = ISD::getSetCCSwappedOperands(CC);
-    std::swap(LHS, RHS);
-  }
+  translateSetCCForBranch(dl, LHS, RHS, CC, DAG);
 
   SDValue TargetCC = DAG.getCondCode(CC);
   return DAG.getNode(SIMISD::BR_CC, dl, Op.getValueType(), Op.getOperand(0),

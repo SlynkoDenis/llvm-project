@@ -70,6 +70,43 @@ unsigned SimInstrInfo::isStoreToStackSlot(const MachineInstr &MI,
   return 0;
 }
 
+bool SimInstrInfo::verifyInstruction(const MachineInstr &MI,
+                                     StringRef &ErrInfo) const {
+  const MCInstrInfo *MCII = Subtarget.getInstrInfo();
+  MCInstrDesc const &Desc = MCII->get(MI.getOpcode());
+
+  for (auto &OI : enumerate(Desc.operands())) {
+    unsigned OpType = OI.value().OperandType;
+    if (OpType >= SimOp::OPERAND_SIMM16 &&
+        OpType <= SimOp::OPERAND_UIMM5) {
+      const MachineOperand &MO = MI.getOperand(OI.index());
+      if (MO.isImm()) {
+        int64_t Imm = MO.getImm();
+        bool Ok;
+        switch (OpType) {
+        default:
+          llvm_unreachable("Unexpected operand type");
+        case SimOp::OPERAND_SIMM16:
+          Ok = isInt<16>(Imm);
+          break;
+        case SimOp::OPERAND_UIMM16:
+          Ok = isUInt<16>(Imm);
+          break;
+        case SimOp::OPERAND_UIMM5:
+          Ok = isUInt<5>(Imm);
+          break;
+        }
+        if (!Ok) {
+          ErrInfo = "Invalid immediate";
+          return false;
+        }
+      }
+    }
+  }
+
+  return true;
+}
+
 static SimCC::CondCodes GetOppositeBranchCondition(SimCC::CondCodes CC)
 {
   switch(CC) {
@@ -80,13 +117,13 @@ static SimCC::CondCodes GetOppositeBranchCondition(SimCC::CondCodes CC)
   case SimCC::NE:
     return SimCC::EQ;
   case SimCC::LT:
-    return SimCC::GT;
+    return SimCC::GE;
   case SimCC::GT:
+    return SimCC::LE;
+  case SimCC::LE:
+     return SimCC::GT;
+  case SimCC::GE:
     return SimCC::LT;
-  // case SimCC::LEU:
-  //   return SimCC::GTU;
-  // case SimCC::GTU:
-  //   return SimCC::LEU;
   }
   llvm_unreachable("Invalid cond code");
 }
@@ -96,7 +133,7 @@ static bool isUncondBranchOpcode(int Opc) {
 }
 
 static bool isCondBranchOpcode(int Opc) {
-  return Opc == SIM::BEQ || Opc == SIM::BNE || Opc == SIM::BGT || Opc == SIM::BLT;
+  return Opc == SIM::BEQ || Opc == SIM::BNE || Opc == SIM::BGT || Opc == SIM::BLE;
 }
 
 static bool isIndirectBranchOpcode(int Opc) {
@@ -111,8 +148,8 @@ const MCInstrDesc &SimInstrInfo::getBranchFromCond(SimCC::CondCodes CC) const {
     return get(SIM::BEQ);
   case SimCC::NE:
     return get(SIM::BNE);
-  case SimCC::LT:
-    return get(SIM::BLT);
+  case SimCC::LE:
+    return get(SIM::BLE);
   case SimCC::GT:
     return get(SIM::BGT);
   // TODO: either add LEU/GTU conditions or delete it
@@ -132,8 +169,8 @@ static SimCC::CondCodes getCondFromBranchOpcode(unsigned Opc) {
     return SimCC::EQ;
   case SIM::BNE:
     return SimCC::NE;
-  case SIM::BLT:
-    return SimCC::LT;
+  case SIM::BLE:
+    return SimCC::LE;
   case SIM::BGT:
     return SimCC::GT;
   // TODO: either add LEU/GTU conditions or delete it

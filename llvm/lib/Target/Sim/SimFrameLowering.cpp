@@ -348,6 +348,8 @@ void SimFrameLowering::determineCalleeSaves(MachineFunction &MF,
     if (hasFP(MF)) {
       SavedRegs.set(SIM::RA);
       SavedRegs.set(SIM::FP);
+    } else {
+      llvm_unreachable("");
     }
     // Mark BP as used if function has dedicated base pointer.
     if (hasBP(MF)) {

@@ -86,7 +86,6 @@ def i32hi16 : Operand<i32>, PatLeaf<(i32 imm), [{
 
 class ImmAsmOperand<string prefix, int width, string suffix> : AsmOperandClass {
   let Name = prefix # "Imm" # width # suffix;
-  let RenderMethod = "addImmOperands";
   let DiagnosticType = !strconcat("Invalid", Name);
 }
 
@@ -106,8 +105,6 @@ def SIMM16 : Operand<i32>, ImmLeaf<i32, [{return isInt<16>(Imm);}]> {
 
 def UIMM16 : Operand<i32>, ImmLeaf<i32, [{return isUInt<16>(Imm);}]> {
   let ParserMatchClass = ImmAsmOperand<"U", 16, "">;
-  let EncoderMethod = "getImmOpValue";
-  let DecoderMethod = "decodeUImmOperand<16>";
   let MCOperandPredicate = [{
     int64_t Imm;
     if (MCOp.evaluateAsConstantImm(Imm))
@@ -118,14 +115,12 @@ def UIMM16 : Operand<i32>, ImmLeaf<i32, [{return isUInt<16>(Imm);}]> {
   let OperandNamespace = "SimOp";
 }
 
-// from Sparc
-// Constrained operands for the shift operations.
-class ShiftAmtImmAsmOperand<int Bits> : AsmOperandClass {
-  let Name = "ShiftAmtImm" # Bits;
-  let ParserMethod = "parseShiftAmtImm<" # Bits # ">";
-}
-def SHIFT_IMM5 : Operand<i32> {
-  let ParserMatchClass = ShiftAmtImmAsmOperand<5>;
+// from RISCV
+// Constrained operand for the shift operations.
+def uimm5 : Operand<i32>, ImmLeaf<i32, [{return isUInt<5>(Imm);}]> {
+  let ParserMatchClass = ImmAsmOperand<"U", 5, "">;
+  let OperandType = "OPERAND_UIMM5";
+  let OperandNamespace = "SimOp";
 }
 
 def BTARGET16 : Operand<OtherVT> {
@@ -169,6 +164,9 @@ class ShiftImmIns<bits<8> op, string inststr, list<dag> pattern> : Instruction {
   let Namespace = "SIM";
   let DecoderNamespace = "SIM";
   let Size = 4;
+  let hasSideEffects = 0;
+  let mayLoad = 0;
+  let mayStore = 0;
 
   field bits<32> Inst;
 
@@ -184,7 +182,7 @@ class ShiftImmIns<bits<8> op, string inststr, list<dag> pattern> : Instruction {
   let Inst{10-0} = 0;
 
   let OutOperandList = (outs GPR:$r1);
-  let InOperandList  = (ins GPR:$r2, SHIFT_IMM5:$imm);
+  let InOperandList  = (ins GPR:$r2, uimm5:$imm);
   let AsmString   = inststr # "\t" # "$r1, $r2, $imm";
   let Pattern     = pattern;
 
@@ -242,9 +240,9 @@ def XORi     : ALU_ri<0x53, "XORi", [(set GPR:$r1, (xor GPR:$r2, SIMM16:$imm16))
 // Shifts definitions
 //===----------------------------------------------------------------------===//
 
-def SHLi     : ShiftImmIns<0x54, "SHLi", [(set GPR:$r1, (shl GPR:$r2, (i32 imm:$imm)))]>;
-def SHRi     : ShiftImmIns<0x55, "SHRi", [(set GPR:$r1, (srl GPR:$r2, (i32 imm:$imm)))]>;
-def SHRAi    : ShiftImmIns<0x56, "SHRAi", [(set GPR:$r1, (sra GPR:$r2, (i32 imm:$imm)))]>;
+def SHLi     : ShiftImmIns<0x54, "SHLi", [(set GPR:$r1, (shl GPR:$r2, uimm5:$imm))]>;
+def SHRi     : ShiftImmIns<0x55, "SHRi", [(set GPR:$r1, (srl GPR:$r2, uimm5:$imm))]>;
+def SHRAi    : ShiftImmIns<0x56, "SHRAi", [(set GPR:$r1, (sra GPR:$r2, uimm5:$imm))]>;
 
 //===----------------------------------------------------------------------===//
 // Moves definitions
@@ -279,13 +277,16 @@ def B        : SimInst<0x02, (outs), (ins BTARGET16:$r3_imm), "B\t$r3_imm", [(br
 def BEQ      : CondBranch<0x06, "BEQ", [(SimBrCC GPR:$r1, GPR:$r2, SETEQ, bb:$r3_imm)]>;
 def BNE      : CondBranch<0x07, "BNE", [(SimBrCC GPR:$r1, GPR:$r2, SETNE, bb:$r3_imm)]>;
 def BGT      : CondBranch<0x08, "BGT", [(SimBrCC GPR:$r1, GPR:$r2, SETGT, bb:$r3_imm)]>;
-def BLT      : CondBranch<0x09, "BLT", [(SimBrCC GPR:$r1, GPR:$r2, SETLT, bb:$r3_imm)]>;
+def BLE      : CondBranch<0x09, "BLE", [(SimBrCC GPR:$r1, GPR:$r2, SETLE, bb:$r3_imm)]>;
 
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0, isCall = 1, isBranch = 1, isTerminator = 1 in {
 def BR : SimInst<0x05, (outs), (ins GPR:$r1), "BR\t$r1",
                  [(brind GPR:$r1)]>;
 def BL : SimInst<0x03, (outs GPR:$r1), (ins CTARGET16:$r3_imm),
                  "BL\t$r1, $r3_imm", []>;
+// BLR needed for indirect pseudo-call only
+def BLR : SimInst<0x0, (outs GPR:$r1), (ins GPR:$r2),
+                  "BLR\t$r1, $r2", []>;
 }
 
 //===----------------------------------------------------------------------===//
@@ -368,10 +369,10 @@ def PseudoCALL : SimPseudoInst<(outs), (ins CTARGET16:$func), "# PseudoCALL",
                                PseudoInstExpansion<(BL R0, CTARGET16:$func)>;
 
 // TODO: implement it
-// let isCall = 1, Defs = [R0] in
-// def PseudoCALLInd : SimPseudoInst<(outs), (ins GPR:$rs1), "# PseudoCALLInd",
-//                     [(SimCall GPR:$rs1)]>,
-//                     PseudoInstExpansion<(BLR R0, GPR:$rs1)>;
+let isCall = 1, Defs = [R0] in
+def PseudoCALLInd : SimPseudoInst<(outs), (ins GPR:$rs1), "# PseudoCALLInd",
+                    [(SimCall GPR:$rs1)]>,
+                    PseudoInstExpansion<(BLR R0, GPR:$rs1)>;
 
 let usesCustomInserter = 1 in
 def PseudoSELECT_CC : SimPseudoInst<(outs GPR:$dst),
@@ -381,20 +382,7 @@ def PseudoSELECT_CC : SimPseudoInst<(outs GPR:$dst),
                                      (SimSelectCC GPR:$lhs, GPR:$rhs,
                                       GPR:$truev, GPR:$falsev, imm:$Cond))]>;
 
-// TODO: delete this commented part (taken from RISCV)
-// def sim_selectcc_frag : PatFrag<(ops node:$lhs, node:$rhs,
-//                                      node:$truev, node:$falsev, node:$cc),
-//                                 (SimSelectCC node:$lhs, node:$rhs,
-//                                              node:$truev, node:$falsev, node:$cc), [{}]>;
-
-// let usesCustomInserter = 1 in
-// class SelectCC_rrirr<RegisterClass valty, RegisterClass cmpty>
-//     : SimPseudoInst<(outs valty:$dst),
-//                     (ins cmpty:$lhs, cmpty:$rhs,
-//                          valty:$truev, valty:$falsev, i32imm:$imm),
-//                     "# PseudoSELECT_CC",
-//                     [(set valty:$dst,
-//                      (sim_selectcc_frag:$imm cmpty:$lhs, cmpty:$rhs,
-//                       valty:$truev, valty:$falsev, cond))]>;
-
-// def PseudoSELECT_CC : SelectCC_rrirr<GPR, GPR>;
+// i16 imm
+def : Pat<(i32 i32li16u:$imm16), (MOVli imm:$imm16)>;
+// i32 imm
+def : Pat<(i32 imm:$imm32), (ORi (MOVhi (HI16 imm:$imm32)), (LI16 imm:$imm32))>;

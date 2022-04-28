@@ -100,6 +100,9 @@ public:
                             const TargetRegisterClass *RC,
                             const TargetRegisterInfo *TRI) const override;
 
+  bool verifyInstruction(const MachineInstr &MI,
+                         StringRef &ErrInfo) const override;
+
   // Lower pseudo instructions after register allocation.
   // bool expandPostRAPseudo(MachineInstr &MI) const override;
 };

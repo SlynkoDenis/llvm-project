@@ -34,7 +34,7 @@ static std::string computeDataLayout() {
   // little endian
   std::string Ret = "e-m:e";
 
-  // Some ABIs have 32bit pointers.
+  // 32bit pointers.
   Ret += "-p:32:32";
 
   // Alignments for 1/8/16/32 bit integers.
@@ -49,6 +49,10 @@ static std::string computeDataLayout() {
   Ret += "-f32:32:32";
   Ret += "-f64:32";
 
+  // Alignment for an object of aggregate type
+  Ret += "-a:0:32";
+
+  // Native integer widths for the target CPU in bits
   Ret += "-n32";
 
   return Ret;

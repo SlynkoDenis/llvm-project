@@ -1,5 +1,5 @@
 	.text
-	.file	"main2.c"
+	.file	"for_loop.c"
 	.globl	main
 	.type	main,@function
 main:
@@ -9,12 +9,31 @@ main:
 	ADDi	%r3, %r1, 20
 	MOVli	%r4, 0
 	STi	%r4, %r3, -12
-	MOVli	%r4, 2
 	STi	%r4, %r3, -16
-	LDi	%r4, %r3, -16
-	MULi	%r4, %r4, 3
 	STi	%r4, %r3, -20
-	LDi	%r10, %r3, -20
+	B	.LBB0_1
+.LBB0_1:
+	LDi	%r4, %r3, -20
+	MOVli	%r9, 99
+	BGT	%r4, %r9, .LBB0_4
+	B	.LBB0_2
+.LBB0_2:
+	LDi	%r4, %r3, -20
+	SHRi	%r9, %r4, 31
+	ADD	%r9, %r4, %r9
+	SHRAi	%r9, %r9, 1
+	SUB	%r9, %r4, %r9
+	LDi	%r4, %r3, -16
+	ADD	%r4, %r4, %r9
+	STi	%r4, %r3, -16
+	B	.LBB0_3
+.LBB0_3:
+	LDi	%r4, %r3, -20
+	ADDi	%r4, %r4, 1
+	STi	%r4, %r3, -20
+	B	.LBB0_1
+.LBB0_4:
+	LDi	%r10, %r3, -16
 	LDi	%r3, %r1, 12
 	LDi	%r0, %r1, 16
 	ADDi	%r1, %r1, 20
