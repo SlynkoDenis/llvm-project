@@ -346,7 +346,10 @@ void SimFrameLowering::determineCalleeSaves(MachineFunction &MF,
     // Unconditionally spill RA and FP only if the function uses a frame
     // pointer.
     if (hasFP(MF)) {
-      SavedRegs.set(SIM::RA);
+      MachineFrameInfo &MFI = MF.getFrameInfo();
+      if (MFI.hasCalls()) {
+        SavedRegs.set(SIM::RA);
+      }
       SavedRegs.set(SIM::FP);
     } else {
       llvm_unreachable("");
