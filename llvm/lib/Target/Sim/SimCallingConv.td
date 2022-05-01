@@ -19,8 +19,8 @@ def CC_Sim : CallingConv<[
   CCIfType<[i32, i64], CCAssignToReg<[R9, R10, R11, R12]>>,
 
   // Alternatively, they are assigned to the stack in 4-byte aligned units.
-  CCIfType<[i32], CCAssignToStack<4, 4>>,
-  CCIfType<[i64], CCAssignToStack<8, 4>>
+  CCIfType<[i32], CCAssignToStack<1, 1>>,
+  CCIfType<[i64], CCAssignToStack<2, 1>>
   // CCIfType<[f32], CCAssignToStack<4, 4>>
 ]>;
 
@@ -32,8 +32,8 @@ def RetCC_Sim : CallingConv<[
   CCIfType<[i32, i64], CCAssignToReg<[R9, R10, R11, R12]>>,
 
   // Alternatively, they are assigned to the stack in 4-byte aligned units.
-  CCIfType<[i32], CCAssignToStack<4, 4>>,
-  CCIfType<[i64], CCAssignToStack<8, 4>>,
+  CCIfType<[i32], CCAssignToStack<1, 1>>,
+  CCIfType<[i64], CCAssignToStack<2, 1>>,
   // CCIfType<[f32], CCAssignToStack<4, 4>>
 ]>;
 

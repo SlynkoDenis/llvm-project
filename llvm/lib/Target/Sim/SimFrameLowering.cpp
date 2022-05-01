@@ -34,7 +34,7 @@ DisableLeafProc("disable-Sim-leaf-proc",
                 cl::Hidden);
 
 SimFrameLowering::SimFrameLowering(const SimSubtarget &ST)
-    : TargetFrameLowering(TargetFrameLowering::StackGrowsDown, Align(4), 0, Align(4)),
+    : TargetFrameLowering(TargetFrameLowering::StackGrowsDown, Align(1), 0, Align(1)),
       ST(ST) {}
 
 void SimFrameLowering::emitRegAdjustment(MachineBasicBlock &MBB,
@@ -75,6 +75,10 @@ void SimFrameLowering::emitPrologue(MachineFunction &MF,
 
     // Get the number of bytes to allocate from the FrameInfo
     auto NumBytes = alignTo(MFI.getStackSize(), getStackAlign());
+    // if (NumBytes % 4) {
+    //   errs() << "WARNING (emitPrologue): NumBytes == " << NumBytes << '\n';
+    // }
+    NumBytes = NumBytes / 4;
     // Update stack size with corrected value.
     MFI.setStackSize(NumBytes);
     if (NumBytes == 0 && !MFI.adjustsStack()) {
@@ -100,7 +104,12 @@ void SimFrameLowering::emitPrologue(MachineFunction &MF,
 
     // FP saved in spillCalleeSavedRegisters
 
-    NumBytes -= FuncInfo->getVarArgsSaveSize();
+    auto tmp = FuncInfo->getVarArgsSaveSize();
+    // TODO: remove this assert
+    // if (tmp % 4) {
+    //   errs() << "WARNING (emitPrologue): tmp == " << tmp << '\n';
+    // }
+    NumBytes -= tmp / 4;
     // Set new FP value
     emitRegAdjustment(MBB, MBBI, NumBytes,
                       MachineInstr::FrameSetup,
@@ -118,7 +127,10 @@ eliminateCallFramePseudoInstr(MachineFunction &MF, MachineBasicBlock &MBB,
     }
 
     if (Size) {
-      emitRegAdjustment(MBB, I, Size, MachineInstr::NoFlags, SIM::SP, SIM::SP);
+      // if (Size % 4) {
+      //   errs() << "WARNING (eliminateCallFramePseudoInstr): Size == " << Size << '\n';
+      // }
+      emitRegAdjustment(MBB, I, Size / 4, MachineInstr::NoFlags, SIM::SP, SIM::SP);
     }
   }
   return MBB.erase(I);
@@ -142,8 +154,11 @@ void SimFrameLowering::emitEpilogue(MachineFunction &MF,
 
     assert(!(MFI.hasVarSizedObjects() && RI->hasStackRealignment(MF)) && "TBD");
 
+    // if (NumBytes % 4) {
+    //   errs() << "WARNING (emitEpilogue): NumBytes == " << NumBytes << '\n';
+    // }
     // TODO: why can't we restore SP using the saved FP value?
-    emitRegAdjustment(MBB, MBBI, NumBytes, MachineInstr::FrameDestroy, SIM::SP, SIM::SP);
+    emitRegAdjustment(MBB, MBBI, NumBytes / 4, MachineInstr::FrameDestroy, SIM::SP, SIM::SP);
 
     if (!hasFP(MF)) {
       return;
@@ -252,21 +267,30 @@ SimFrameLowering::getFrameIndexReference(const MachineFunction &MF, int FI,
     errs() << "FuncInfo->isLeafProc()\n"; 
     UseFP = false;
   } else if (RegInfo->hasStackRealignment(MF)) {
-    llvm_unreachable("TBD");
+    // TODO: resolve it
+    // errs() << "WARNING (getFrameIndexReference): hasStackRealignment -> true\n";
+    // llvm_unreachable("TBD");
     // If there is dynamic stack realignment, all local object
     // references need to be via %sp, to take account of the
     // re-alignment.
-    UseFP = false;
+    // UseFP = false;
+    UseFP = true;
   } else {
     // Finally, default to using %fp.
     UseFP = true;
   }
+
+  // if (FrameOffset % 4) {
+  //   errs() << "WARNING (emitPrologue): FrameOffset == " << FrameOffset << '\n';
+  // }
+  FrameOffset = FrameOffset / 4;
 
   if (UseFP) {
     FrameReg = RegInfo->getFrameRegister(MF);
     return StackOffset::getFixed(FrameOffset);
   } else {
     FrameReg = SIM::SP;
+    // errs() << "MF.getFrameInfo().getStackSize() == " << MF.getFrameInfo().getStackSize() << '\n';
     return StackOffset::getFixed(FrameOffset + MF.getFrameInfo().getStackSize());
   }
 }

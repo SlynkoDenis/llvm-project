@@ -27,7 +27,7 @@ class SimGPRReg<bits<16> Enc, string n> : SimReg<Enc, n> {
 //===----------------------------------------------------------------------===//
 //@ All registers definition
 foreach I = 0-15 in {
-  def R#I    : SimGPRReg<0, "r"#I>, DwarfRegNum<[I]>;
+  def R#I    : SimGPRReg<I, "r"#I>, DwarfRegNum<[I]>;
 }
 
 //===----------------------------------------------------------------------===//
