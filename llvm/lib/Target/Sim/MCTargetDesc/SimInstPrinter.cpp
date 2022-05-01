@@ -36,7 +36,9 @@ using namespace llvm;
 
 void SimInstPrinter::printRegName(raw_ostream &OS, unsigned RegNo) const
 {
-  OS << '%' << StringRef(getRegisterName(RegNo)).lower();
+  // changed for compatibility with emulator
+  // OS << '%' << StringRef(getRegisterName(RegNo)).lower();
+  OS << StringRef(getRegisterName(RegNo)).lower();
 }
 
 void SimInstPrinter::printInst(const MCInst *MI, uint64_t Address,

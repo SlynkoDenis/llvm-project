@@ -45,7 +45,9 @@ static MCAsmInfo *createSimMCAsmInfo(const MCRegisterInfo &MRI,
                                      const Triple &T,
                                      const MCTargetOptions &Options) {
   MCAsmInfo *MAI = new SimMCAsmInfo(T);
-  MCRegister SP = MRI.getDwarfRegNum(SIM::R1, true);
+  // MCRegister SP = MRI.getDwarfRegNum(SIM::R1, true);
+  // changed for compatibility with emulator
+  MCRegister SP = MRI.getDwarfRegNum(SIM::R2, true);
   MCCFIInstruction Inst = MCCFIInstruction::cfiDefCfa(nullptr, SP, 0);
   MAI->addInitialFrameState(Inst);
   return MAI;
@@ -58,7 +60,9 @@ static MCAsmInfo *createSimMCAsmInfo(const MCRegisterInfo &MRI,
 
 static MCRegisterInfo *createSimMCRegisterInfo(const Triple &TT) {
   MCRegisterInfo *X = new MCRegisterInfo();
-  InitSimMCRegisterInfo(X, SIM::R0);  // R0 == RA
+  // RA == R0
+  // RA changed to R1 for compatibility with emulator
+  InitSimMCRegisterInfo(X, SIM::R1);
   return X;
 }
 

@@ -33,7 +33,9 @@ static cl::opt<bool>
 ReserveAppRegisters("Sim-reserve-app-registers", cl::Hidden, cl::init(false),
                     cl::desc("Reserve application registers (%g2-%g4)"));
 
-SimRegisterInfo::SimRegisterInfo() : SimGenRegisterInfo(SIM::R0) {} // RA - R0
+// RA == R0
+// RA changed to R1 for compatibility with emulator
+SimRegisterInfo::SimRegisterInfo() : SimGenRegisterInfo(SIM::R1) {}
 
 const MCPhysReg*
 SimRegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {

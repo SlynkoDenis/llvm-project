@@ -51,7 +51,7 @@ class SimInst<bits<8> op, dag outs, dag ins, string asmstr,
 
 class ALU_ri<bits<8> opcode, string asmstr,
              list<dag> pattern> : SimInst<opcode, (outs GPR:$r1), (ins GPR:$r2, GPR:$imm16),
-                                          asmstr # "\t" # "$r1, $r2, $imm16", pattern> {
+                                          asmstr # "\t" # "$r1 $r2 $imm16", pattern> {
   let mayLoad = 0;
   let mayStore = 0;
 }
@@ -67,7 +67,7 @@ class SimInstRegister<bits<8> opcode, dag outs,
 
 class ALU_rr<bits<8> opcode, string asmstr,
              list<dag> pattern> : SimInstRegister<opcode, (outs GPR:$r1), (ins GPR:$r2, GPR:$r3),
-                                                  asmstr # "\t" # "$r1, $r2, $r3", pattern> {
+                                                  asmstr # "\t" # "$r1 $r2 $r3", pattern> {
   let mayLoad = 0;
   let mayStore = 0;
 }

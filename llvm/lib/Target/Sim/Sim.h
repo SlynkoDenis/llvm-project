@@ -33,13 +33,19 @@ FunctionPass *createSimISelDag(SimTargetMachine &TM,
                                CodeGenOpt::Level OptLevel);
 
 namespace SIM {
-// Similar to RISC-V
 enum {
-  RA = SIM::R0,
-  SP = SIM::R1,
-  GP = SIM::R2,
+  // changed for compatibility with emulator
+  GP = SIM::R0,
+  RA = SIM::R1,
+  SP = SIM::R2,
   FP = SIM::R3,
   BP = SIM::R4,
+  // Similar to RISC-V
+  // RA = SIM::R0,
+  // SP = SIM::R1,
+  // GP = SIM::R2,
+  // FP = SIM::R3,
+  // BP = SIM::R4,
 };
 } // end namespace SIM;
 

@@ -58,8 +58,6 @@ void SimFrameLowering::emitPrologue(MachineFunction &MF,
 
     assert(&MF.front() == &MBB && "Shrink-wrapping not yet supported");
     MachineFrameInfo &MFI = MF.getFrameInfo();
-    // const SimInstrInfo &TII =
-    //     *static_cast<const SimInstrInfo *>(ST.getInstrInfo());
     const SimRegisterInfo &RegInfo =
         *static_cast<const SimRegisterInfo *>(ST.getRegisterInfo());
     MachineBasicBlock::iterator MBBI = MBB.begin();
