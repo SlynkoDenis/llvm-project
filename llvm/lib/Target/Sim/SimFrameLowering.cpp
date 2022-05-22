@@ -147,7 +147,7 @@ void SimFrameLowering::emitEpilogue(MachineFunction &MF,
     //        "Can only put epilog before 'ret' instruction!");
     MachineFrameInfo &MFI = MF.getFrameInfo();
 
-    auto NumBytes = alignTo(MFI.getStackSize(), getStackAlign());
+    auto NumBytes = MFI.getStackSize();
     if (NumBytes == 0 && !MFI.adjustsStack()) {
       return;
     }
@@ -158,7 +158,7 @@ void SimFrameLowering::emitEpilogue(MachineFunction &MF,
     //   errs() << "WARNING (emitEpilogue): NumBytes == " << NumBytes << '\n';
     // }
     // TODO: why can't we restore SP using the saved FP value?
-    emitRegAdjustment(MBB, MBBI, NumBytes / 4, MachineInstr::FrameDestroy, SIM::SP, SIM::SP);
+    emitRegAdjustment(MBB, MBBI, NumBytes, MachineInstr::FrameDestroy, SIM::SP, SIM::SP);
 
     if (!hasFP(MF)) {
       return;

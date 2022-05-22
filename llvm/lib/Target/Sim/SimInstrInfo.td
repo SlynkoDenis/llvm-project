@@ -335,6 +335,8 @@ def STi      : SimInst<0x73, (outs), (ins GPR:$r1, GPR:$r2, SIMM16:$r3_imm),
 
 def : Pat<(store (i32 GPR:$r1), ADDRri:$r2),
           (STi GPR:$r1, ADDRri:$r2, 0)>;
+def : Pat<(store (i32 GPR:$r1), ADDRrr:$r2),
+          (STi GPR:$r1, ADDRrr:$r2, 0)>;
 
 //===----------------------------------------------------------------------===//
 // Pseudo Instructions

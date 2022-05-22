@@ -619,17 +619,22 @@ static unsigned convertCondCodeToInstruction(unsigned CC) {
   unsigned BROpcode = 0;
   switch(CC) {
   default:
+    errs() << "unsupported CondCode in branch: " << CC << '\n';
     llvm_unreachable("");
     break;
+  case ISD::CondCode::SETUEQ:
   case ISD::CondCode::SETEQ:
     BROpcode = SIM::BEQ;
     break;
+  case ISD::CondCode::SETUNE:
   case ISD::CondCode::SETNE:
     BROpcode = SIM::BNE;
     break;
+  case ISD::CondCode::SETULE:
   case ISD::CondCode::SETLE:
     BROpcode = SIM::BLE;
     break;
+  case ISD::CondCode::SETUGT:
   case ISD::CondCode::SETGT:
     BROpcode = SIM::BGT;
     break;
@@ -641,8 +646,20 @@ MachineBasicBlock *
 SimTargetLowering::expandSelectCC(MachineInstr &MI, MachineBasicBlock *BB) const {
   const TargetInstrInfo &TII = *Subtarget->getInstrInfo();
   DebugLoc dl = MI.getDebugLoc();
-  // unsigned CC = (SimCC::CondCodes)MI.getOperand(4).getImm();
   unsigned CC = (ISD::CondCode)MI.getOperand(5).getImm();
+  auto LHS = MI.getOperand(1).getReg();
+  auto RHS = MI.getOperand(2).getReg();
+  switch (CC) {
+  default:
+    break;
+  case ISD::SETLT:
+  case ISD::SETGE:
+  case ISD::SETULT:
+  case ISD::SETUGE:
+    CC = ISD::getSetCCSwappedOperands((ISD::CondCode)MI.getOperand(5).getImm());
+    std::swap(LHS, RHS);
+    break;
+  }
 
   unsigned BROpcode = convertCondCodeToInstruction(CC);
 
@@ -677,7 +694,7 @@ SimTargetLowering::expandSelectCC(MachineInstr &MI, MachineBasicBlock *BB) const
   ThisMBB->addSuccessor(SinkMBB);
 
   BuildMI(ThisMBB, dl, TII.get(BROpcode))
-    .addReg(MI.getOperand(1).getReg())
+    .addReg(LHS)
     .addReg(MI.getOperand(2).getReg())
     .addMBB(SinkMBB);
 
@@ -717,6 +734,8 @@ static void translateSetCCForBranch(const SDLoc &DL, SDValue &LHS, SDValue &RHS,
     break;
   case ISD::SETLT:
   case ISD::SETGE:
+  case ISD::SETULT:
+  case ISD::SETUGE:
     // We don't implement BLT and BGE instructions - must replace them on opposite
     CC = ISD::getSetCCSwappedOperands(CC);
     std::swap(LHS, RHS);
@@ -724,8 +743,34 @@ static void translateSetCCForBranch(const SDLoc &DL, SDValue &LHS, SDValue &RHS,
   }
 }
 
+static void translateUnorderedCondCodeForBranch(ISD::CondCode &CC) {
+  switch (CC) {
+  default:
+    break;
+  case ISD::SETUEQ:
+    CC = ISD::SETEQ;
+    break;
+  case ISD::SETUNE:
+    CC = ISD::SETNE;
+    break;
+  case ISD::SETULE:
+    CC = ISD::SETLE;
+    break;
+  case ISD::SETUGT:
+    CC = ISD::SETGT;
+    break;
+  case ISD::SETUGE:
+    CC = ISD::SETGE;
+    break;
+  case ISD::SETULT:
+    CC = ISD::SETLT;
+    break;
+  }
+}
+
 static SDValue LowerBR_CC(SDValue Op, SelectionDAG &DAG) {
   ISD::CondCode CC = cast<CondCodeSDNode>(Op.getOperand(1))->get();
+  translateUnorderedCondCodeForBranch(CC);
   SDValue LHS = Op.getOperand(2);
   SDValue RHS = Op.getOperand(3);
   SDValue Dest = Op.getOperand(4);
