@@ -328,6 +328,7 @@ set(LLVM_ALL_TARGETS
   NVPTX
   PowerPC
   RISCV
+  Sim
   Sparc
   SystemZ
   VE
@@ -1216,6 +1217,7 @@ if (LLVM_INCLUDE_BENCHMARKS)
     "Handle -Werror for Google Benchmark based on LLVM_ENABLE_WERROR" FORCE)
   # Since LLVM requires C++11 it is safe to assume that std::regex is available.
   set(HAVE_STD_REGEX ON CACHE BOOL "OK" FORCE)
+
   add_subdirectory(${LLVM_THIRD_PARTY_DIR}/benchmark 
     ${CMAKE_CURRENT_BINARY_DIR}/third-party/benchmark)
   add_subdirectory(benchmarks)
